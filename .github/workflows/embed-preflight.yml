@@ -8,6 +8,7 @@ on:
       - 'ci/remote_server.py'
       - 'ci/live-emulator.html'
       - 'ci/test_live_remote.py'
+      - 'ci/test_resume_viewer.cjs'
       - 'ci/run_live_tv_session.sh'
 permissions:
   contents: read
@@ -30,6 +31,7 @@ jobs:
           python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
           bash -n ci/run_live_tv_session.sh
           python3 ci/test_live_remote.py
+          node ci/test_resume_viewer.cjs
           python3 - <<'PY'
           from pathlib import Path
           browser = Path('ci/live-emulator.html').read_text()
