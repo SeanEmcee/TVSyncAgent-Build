@@ -42,6 +42,9 @@ jobs:
           set -euo pipefail
           python3 -m py_compile ci/remote_server.py
           bash -n ci/run_chat_embed_preview.sh ci/start_tv_mirror.sh
+          grep -q 'bash ci/start_tv_mirror.sh' ci/run_chat_embed_preview.sh
+          grep -q 'auth_button=' ci/run_chat_embed_preview.sh
+          grep -q 'emulator-5554' ci/remote_server.py
           grep -q 'check_session(request)' ci/remote_server.py
           grep -q 'hmac.compare_digest' ci/remote_server.py
 
