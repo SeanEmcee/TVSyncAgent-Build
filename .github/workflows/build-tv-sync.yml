@@ -1,0 +1,79 @@
+name: Build TV Sync Agent APK
+run-name: TV Sync Android TV build
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tvsync-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Confirm private-source token is configured
+        shell: bash
+        env:
+          SOURCE_TOKEN: ${{ secrets.TVSYNC_PRIVATE_SOURCE_TOKEN }}
+        run: |
+          if [ -z "$SOURCE_TOKEN" ]; then
+            echo "::error::Set TVSYNC_PRIVATE_SOURCE_TOKEN under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "Private-source credential configured."
+
+      - name: Check out private TV Sync source
+        uses: actions/checkout@v4
+        with:
+          repository: SeanEmcee/TVSyncAgent
+          ref: main
+          token: ${{ secrets.TVSYNC_PRIVATE_SOURCE_TOKEN }}
+          persist-credentials: false
+          path: source
+
+      - name: Configure Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API level 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Verify project and run source tests
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
+          python3 tools/test_menu_positioner.py
+          python3 tools/test_browser_state.py
+
+      - name: Compile and lint Android TV application
+        working-directory: source
+        run: gradle --no-daemon :app:assembleDebug :app:lintDebug --stacktrace
+
+      - name: Verify APK exists
+        shell: bash
+        run: test -s source/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVSyncAgent-debug-apk
+          path: source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
