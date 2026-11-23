@@ -34,6 +34,8 @@ body.theater-active .theater-stage{position:fixed;z-index:10000;inset:0;width:10
 body.theater-active .screen-wrap{width:min(100dvw,calc(100dvh * 16 / 9));max-width:none;margin:0;border:0;border-radius:0;overflow:hidden}
 body.theater-active .theater-toggle{top:max(7px,env(safe-area-inset-top));right:max(9px,env(safe-area-inset-right));background:rgba(12,21,32,.80)}
 body.theater-active .theater-remote{position:absolute;display:flex;flex-direction:row;gap:9px;align-items:center;right:max(10px,env(safe-area-inset-right));bottom:max(9px,env(safe-area-inset-bottom));z-index:12;padding:7px 10px;background:rgba(8,15,24,.87);border:1px solid rgba(72,226,230,.38);border-radius:16px;box-shadow:0 6px 22px #000a;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.theater-remote-handle{min-width:27px!important;width:27px;align-self:stretch;cursor:grab;touch-action:none;font-size:20px!important;color:#80e6e9!important;border-style:dashed!important}
+.theater-remote-handle:active{cursor:grabbing}
 .theater-remote-dpad{display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:repeat(3,29px);gap:2px}
 .theater-remote button{padding:0;min-width:30px;min-height:26px;border-radius:8px;background:#1a2c3a;border:1px solid #355160;color:#f2ffff;font-size:12px;touch-action:manipulation}
 .theater-remote button:active{background:#125466;border-color:#27e1e8}
@@ -53,6 +55,7 @@ body.theater-active #theaterHint{display:block;position:absolute;pointer-events:
 <div class="screen-wrap"><div id="screen"><span id="placeholder">Loading emulator display…</span></div>
 <button id="theaterToggle" class="theater-toggle" type="button" aria-label="Enter landscape fullscreen" aria-pressed="false" title="Fullscreen landscape">⛶ <span id="theaterToggleLabel">Fullscreen</span></button></div>
 <div id="theaterRemote" class="theater-remote" aria-label="Compact TV remote">
+<button id="theaterRemoteHandle" class="theater-remote-handle" type="button" aria-label="Drag remote" title="Drag remote">⠿</button>
 <div class="theater-remote-dpad" aria-label="Directional buttons">
 <span></span><button data-key="up" type="button" aria-label="Up">▲</button><span></span>
 <button data-key="left" type="button" aria-label="Left">◀</button><button class="theater-ok" data-key="ok" type="button" aria-label="OK">OK</button><button data-key="right" type="button" aria-label="Right">▶</button>
@@ -117,8 +120,8 @@ function connect(){
   viewer.scaleViewport = true;
   viewer.resizeSession = false;
   viewer.viewOnly = true;
-  viewer.qualityLevel = 8;
-  viewer.compressionLevel = 5;
+  viewer.qualityLevel = 6;
+  viewer.compressionLevel = 2;
   viewer.addEventListener('connect',()=>{
    if(currentGeneration !== generation) return;
    reconnectAttempts = 0;
@@ -271,11 +274,48 @@ const theaterToggleLabel=document.getElementById('theaterToggleLabel');
 const theaterHint=document.getElementById('theaterHint');
 let theaterActive=false;
 let attemptedNativeFullscreen=false;
+// Drag only from the handle, so remote key presses remain unaffected.
+// The stage is CSS-rotated on portrait iOS, so translate screen deltas to stage axes.
+const theaterRemote=document.getElementById('theaterRemote');
+const remoteHandle=document.getElementById('theaterRemoteHandle');
+let remotePositioned=false;
+let remoteDrag=null;
+function placeRemote(x,y){
+ const maxX=Math.max(8,theaterStage.clientWidth-theaterRemote.offsetWidth-8);
+ const maxY=Math.max(8,theaterStage.clientHeight-theaterRemote.offsetHeight-8);
+ const cx=Math.min(Math.max(8,x),maxX);
+ const cy=Math.min(Math.max(8,y),maxY);
+ theaterRemote.style.left=cx+'px';
+ theaterRemote.style.top=cy+'px';
+ theaterRemote.style.right='auto';
+ theaterRemote.style.bottom='auto';
+ remotePositioned=true;
+}
+remoteHandle.addEventListener('pointerdown',ev=>{
+ if(!theaterActive||ev.button!==0)return;
+ remoteDrag={id:ev.pointerId,x:ev.clientX,y:ev.clientY,
+             left:theaterRemote.offsetLeft,top:theaterRemote.offsetTop};
+ remoteHandle.setPointerCapture(ev.pointerId);
+ ev.preventDefault();
+});
+remoteHandle.addEventListener('pointermove',ev=>{
+ if(!remoteDrag||remoteDrag.id!==ev.pointerId)return;
+ const rotated=document.body.classList.contains('theater-rotate');
+ const dx=rotated?ev.clientY-remoteDrag.y:ev.clientX-remoteDrag.x;
+ const dy=rotated?remoteDrag.x-ev.clientX:ev.clientY-remoteDrag.y;
+ placeRemote(remoteDrag.left+dx,remoteDrag.top+dy);
+ ev.preventDefault();
+});
+function endRemoteDrag(ev){if(remoteDrag&&remoteDrag.id===ev.pointerId)remoteDrag=null;}
+remoteHandle.addEventListener('pointerup',endRemoteDrag);
+remoteHandle.addEventListener('pointercancel',endRemoteDrag);
+remoteHandle.addEventListener('lostpointercapture',endRemoteDrag);
 function isPortrait(){return window.matchMedia ? window.matchMedia('(orientation: portrait)').matches : window.innerHeight>window.innerWidth;}
 function applyTheaterGeometry(){
  if(!theaterActive)return;
  const rotate=isPortrait();
  document.body.classList.toggle('theater-rotate',rotate);
+ if(remotePositioned)placeRemote(parseFloat(theaterRemote.style.left),parseFloat(theaterRemote.style.top));
  theaterHint.textContent=rotate ? 'Hold your phone sideways for landscape viewing' : '';
 }
 async function enterTheater(){
