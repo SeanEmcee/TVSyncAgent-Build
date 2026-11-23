@@ -10,7 +10,7 @@ header{max-width:1680px;margin:0 auto 10px;display:flex;justify-content:space-be
 h1{font-size:18px;font-weight:700;margin:0}#status{color:#ffcd78;font-size:12px}
 .screen-wrap{margin:auto;max-width:1680px;background:#03070b;border:1px solid var(--border);border-radius:12px;overflow:hidden}
 #screen{aspect-ratio:16/9;width:100%;position:relative;display:flex;align-items:center;justify-content:center}
-#screen canvas{max-width:100%}#placeholder{position:absolute;color:var(--muted);font-size:13px;pointer-events:none}
+#screen canvas{max-width:100%;cursor:none!important} #screen, #screen *{cursor:none!important}#placeholder{position:absolute;color:var(--muted);font-size:13px;pointer-events:none}
 .toolbar{display:flex;justify-content:space-between;align-items:center;max-width:1680px;margin:10px auto;gap:14px;flex-wrap:wrap}
 .hint{font-size:12px;color:var(--muted)}.remote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dpad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,50px);gap:3px}
@@ -46,7 +46,7 @@ function connect(){
  const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/websockify';
  status.textContent='Connecting to emulator…';
  rfb=new RFB(holder,url,{shared:true});
- rfb.scaleViewport=true;rfb.resizeSession=false;rfb.viewOnly=false;
+ rfb.scaleViewport=true;rfb.resizeSession=false;rfb.viewOnly=true;
  rfb.qualityLevel=8;rfb.compressionLevel=5;
  rfb.addEventListener('connect',()=>{
    status.textContent='● Connected';status.style.color='#65e4a3';placeholder.hidden=true;
