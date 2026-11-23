@@ -1,7 +1,5 @@
 # TV Sync live emulator
 
-[**Open your protected interactive emulator**](https://pulse-following-celebrate-prospects.trycloudflare.com)
+**Offline** — no active session confirmed.
 
-This temporary Google TV instance is protected by an email one-time code.
-
-[Live build and logs](https://github.com/SeanEmcee/TVSyncAgent-Build/actions/runs/45092686298)
+Start a new run from [TV Sync Live Emulator Actions](https://github.com/SeanEmcee/TVSyncAgent-Build/actions/workflows/live-emulator.yml).
