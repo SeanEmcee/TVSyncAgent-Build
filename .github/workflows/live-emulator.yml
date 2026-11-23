@@ -4,7 +4,7 @@ run-name: Secure browser emulator · TV Sync APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/tv-emulator-viewport-latency-drag-20261122]
+    branches: [main, feature/tv-emulator-viewport-latency-drag-20261122, experiment/tvsync-guest-render-scale-20261122]
     paths:
       - '.github/workflows/live-emulator.yml'
       - 'ci/live-emulator.html'

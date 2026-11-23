@@ -40,6 +40,28 @@ done
 sleep 2
 adb -s emulator-5554 shell dumpsys gfxinfo dev.tvsync.agent framestats > smoke-report/android-ui-framestats.txt || true
 adb -s emulator-5554 shell dumpsys SurfaceFlinger --list > smoke-report/android-surface-layers.txt || true
+
+# EXPERIMENT ONLY: compare same app at 1080p effective Android size
+# while leaving AVD hardware native 4K. Reset even if the benchmark fails.
+reset_native_4k() { adb -s emulator-5554 shell wm size reset >/dev/null || true; }
+trap reset_native_4k EXIT
+adb -s emulator-5554 shell wm size 1920x1080
+adb -s emulator-5554 shell am force-stop dev.tvsync.agent
+adb -s emulator-5554 shell am start -W -n dev.tvsync.agent/.MainActivity
+adb -s emulator-5554 shell dumpsys gfxinfo dev.tvsync.agent reset >/dev/null || true
+for i in $(seq 1 12); do
+  adb -s emulator-5554 shell input keyevent 20 >/dev/null
+  adb -s emulator-5554 shell input keyevent 19 >/dev/null
+done
+sleep 2
+adb -s emulator-5554 shell dumpsys gfxinfo dev.tvsync.agent framestats > smoke-report/android-ui-1080-framestats.txt
+reset_native_4k
+trap - EXIT
+adb -s emulator-5554 shell am force-stop dev.tvsync.agent
+adb -s emulator-5554 shell am start -W -n dev.tvsync.agent/.MainActivity
+adb -s emulator-5554 shell wm size | tee smoke-report/android-4k-restored.txt
+grep -q 'Physical size: 3840x2160' smoke-report/android-4k-restored.txt
+! grep -q 'Override size:' smoke-report/android-4k-restored.txt
 echo 'Scrcpy recorded throughput (requires active screen changes):'
 grep -Ei '(fps|frames)' "$RUNNER_TEMP/tvsync-scrcpy.log" | tail -15 || true
 # Capture rendering pipeline and host state to distinguish input, encoding and VNC lag.
