@@ -41,28 +41,113 @@ import RFB from './core/rfb.js';
 const status=document.getElementById('status');
 const holder=document.getElementById('screen');
 const placeholder=document.getElementById('placeholder');
-let rfb;
+let rfb = null;
+let generation = 0;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let hiddenAt = null;
+let accessRejected = false;
 const sessionToken = new URLSearchParams(location.search).get('session') || '';
 const sessionQuery = sessionToken ? '?session=' + encodeURIComponent(sessionToken) : '';
-function connect(){
- if(rfb){rfb.disconnect();rfb=undefined;}
- const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/websockify'+sessionQuery;
- status.textContent='Connecting to emulator…';
- rfb=new RFB(holder,url,{shared:true});
- rfb.scaleViewport=true;rfb.resizeSession=false;rfb.viewOnly=true;
- rfb.qualityLevel=8;rfb.compressionLevel=5;
- rfb.addEventListener('connect',()=>{
-   status.textContent='● Connected';status.style.color='#65e4a3';placeholder.hidden=true;
- });
- rfb.addEventListener('disconnect',()=>{
-   status.textContent='Disconnected · Reconnect to retry';status.style.color='#ffcd78';
- });
- rfb.addEventListener('securityfailure',()=>{
-   status.textContent='Display authentication failed';status.style.color='#ff8d8d';
- });
+const isVisible = () => document.visibilityState !== 'hidden';
+const MAX_RETRY_MS = 12000;
+
+// iOS can suspend a WebSocket when Safari / ChatGPT enters the background.
+// Treat a disconnected viewer as a transport issue, NOT as lost authentication.
+function clearReconnectTimer(){
+ if(reconnectTimer !== null){clearTimeout(reconnectTimer);reconnectTimer=null;}
 }
+function scheduleReconnect(){
+ if(!isVisible() || accessRejected || reconnectTimer !== null) return;
+ const delay = Math.min(MAX_RETRY_MS, 550 * (2 ** Math.min(reconnectAttempts++, 5)));
+ status.textContent = 'Reconnecting to the same TV session…';
+ status.style.color = '#ffcd78';
+ reconnectTimer = setTimeout(()=>{reconnectTimer=null;connect();},delay);
+}
+function connect(){
+ if(!isVisible() || accessRejected) return;
+ clearReconnectTimer();
+ const currentGeneration = ++generation;
+ if(rfb){
+  try{rfb.disconnect();}catch(_){}
+  rfb = null;
+ }
+ const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/websockify' + sessionQuery;
+ status.textContent = 'Connecting to TV Sync…';
+ status.style.color = '#ffcd78';
+ try {
+  const viewer = new RFB(holder,url,{shared:true});
+  rfb = viewer;
+  viewer.scaleViewport = true;
+  viewer.resizeSession = false;
+  viewer.viewOnly = true;
+  viewer.qualityLevel = 8;
+  viewer.compressionLevel = 5;
+  viewer.addEventListener('connect',()=>{
+   if(currentGeneration !== generation) return;
+   reconnectAttempts = 0;
+   clearReconnectTimer();
+   status.textContent = '● Connected';
+   status.style.color = '#65e4a3';
+   placeholder.hidden = true;
+  });
+  viewer.addEventListener('disconnect',()=>{
+   if(currentGeneration !== generation) return;
+   rfb = null;
+   if(accessRejected) return;
+   if(isVisible()) scheduleReconnect();
+   else {
+    status.textContent = 'Paused in background · reconnects when reopened';
+    status.style.color = '#ffcd78';
+   }
+  });
+  viewer.addEventListener('securityfailure',()=>{
+   if(currentGeneration !== generation) return;
+   accessRejected = true;
+   clearReconnectTimer();
+   status.textContent = 'Session access expired · reopen your private link';
+   status.style.color = '#ff8d8d';
+  });
+ } catch(_){
+  if(currentGeneration === generation) {rfb=null;scheduleReconnect();}
+ }
+}
+function foregroundResume(){
+ if(!isVisible()) return;
+ // A brief switch away should not force a reload or trigger the email flow.
+ // For a suspended connection, reconnect using the ORIGINAL tokenized URL.
+ if(hiddenAt !== null){
+  const backgroundMs = Date.now()-hiddenAt;
+  hiddenAt = null;
+  if(backgroundMs >= 1200){
+   reconnectAttempts = 0;
+   connect();
+   return;
+  }
+ }
+ if(!rfb && !accessRejected) scheduleReconnect();
+}
+document.addEventListener('visibilitychange',()=>{
+ if(!isVisible()){
+  hiddenAt = Date.now();
+  clearReconnectTimer();
+ } else foregroundResume();
+});
+window.addEventListener('pagehide',()=>{
+ hiddenAt = Date.now();
+ clearReconnectTimer();
+});
+window.addEventListener('pageshow',foregroundResume);
+window.addEventListener('focus',foregroundResume);
+window.addEventListener('online',()=>{
+ if(isVisible() && !accessRejected){reconnectAttempts=0;connect();}
+});
+document.getElementById('reconnect').addEventListener('click',()=>{
+ accessRejected = false;
+ reconnectAttempts = 0;
+ connect();
+});
 connect();
-document.getElementById('reconnect').addEventListener('click',connect);
 let busy=false;
 async function send(key,hold=false){
  if(busy)return;
