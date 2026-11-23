@@ -47,6 +47,7 @@ jobs:
           grep -q 'emulator-5554' ci/remote_server.py
           grep -q 'check_session(request)' ci/remote_server.py
           grep -q 'hmac.compare_digest' ci/remote_server.py
+          grep -q 'hw.lcd.density=640' ci/configure_4k_avd.sh
 
       - name: Retrieve proven Android TV APK
         uses: actions/download-artifact@v4
@@ -102,9 +103,9 @@ jobs:
       - name: Boot Android 14 Google TV and open token-gated chat screen
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 36
           target: google-tv
-          arch: x86
+          arch: x86_64
           profile: tv_4k
           cores: 4
           ram-size: 4096M
