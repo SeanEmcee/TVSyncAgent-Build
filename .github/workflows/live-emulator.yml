@@ -12,6 +12,7 @@ on:
       - 'ci/run_live_tv_session.sh'
       - 'ci/test_live_remote.py'
       - 'ci/test_live_gui.sh'
+      - 'ci/test_live_browser.py'
       - 'ci/start_tv_mirror.sh'
       - 'ci/configure_4k_avd.sh'
       - 'ci/test_resume_viewer.cjs'
