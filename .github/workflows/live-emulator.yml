@@ -66,7 +66,7 @@ jobs:
           PY
 
   gui-smoke:
-    name: Compare official Android TV 4K display and remote controls
+    name: Check updated Google TV Android 16 4K UI and remote
     needs: preflight
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -126,9 +126,9 @@ jobs:
       - name: Boot graphical Google TV emulator and test control server
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
-          target: android-tv
-          arch: x86
+          api-level: 36
+          target: google-tv
+          arch: x86_64
           profile: tv_4k
           cores: 4
           ram-size: 4096M
