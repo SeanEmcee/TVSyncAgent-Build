@@ -33,6 +33,7 @@ adb shell appops set dev.tvsync.agent MANAGE_EXTERNAL_STORAGE allow || true
 adb shell 'mkdir -p /sdcard/Download /sdcard/Movies /sdcard/Pictures'
 adb shell 'touch /sdcard/demo.mp4 /sdcard/test-file.txt /sdcard/sample-picture.jpg'
 adb shell am start -W -n dev.tvsync.agent/.MainActivity
+bash ci/start_tv_mirror.sh
 
 TVSYNC_EMBED_TOKEN="$embed_token" nohup python3 ci/remote_server.py --port 6081 \
   > "$RUNNER_TEMP/embed-server.log" 2>&1 </dev/null &
