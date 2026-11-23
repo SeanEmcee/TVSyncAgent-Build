@@ -57,7 +57,7 @@ PY
 nohup "$binary" --serial emulator-5554 \
   --no-control --no-audio --fullscreen --window-borderless --always-on-top \
   --window-title="TV Sync Mirror" --background-color=000000 \
-  --max-size=1920 --max-fps=30 --video-bit-rate=3M --video-buffer=0 \
+  --max-size=1920 --max-fps=30 --video-bit-rate=3M --video-buffer=0 --print-fps \
   > "$RUNNER_TEMP/tvsync-scrcpy.log" 2>&1 </dev/null &
 mirror_pid=$!
 echo "$mirror_pid" > "$RUNNER_TEMP/tvsync-scrcpy.pid"

@@ -17,14 +17,20 @@ const placeholder={hidden:false};
 const inputStatus={textContent:'',style:{}};
 const theaterToggleLabel={textContent:'Fullscreen'};
 const theaterHint={textContent:''};
-const theaterStage={};
+const theaterStage={clientWidth:844,clientHeight:390};
+const remoteEvents=new Map();
+const theaterRemote={offsetLeft:600,offsetTop:274,offsetWidth:234,offsetHeight:107,style:{}};
+const remoteHandle={
+ addEventListener(name,fn){remoteEvents.set(name,fn)},
+ setPointerCapture(id){this.captureId=id},
+};
 const theatreClasses=new Set();
-const body={classList:{add(...names){for(const n of names)theatreClasses.add(n)},remove(...names){for(const n of names)theatreClasses.delete(n)},toggle(name,enabled){if(enabled)theatreClasses.add(name);else theatreClasses.delete(name)}}};
+const body={classList:{add(...names){for(const n of names)theatreClasses.add(n)},remove(...names){for(const n of names)theatreClasses.delete(n)},toggle(name,enabled){if(enabled)theatreClasses.add(name);else theatreClasses.delete(name)},contains(name){return theatreClasses.has(name)}}};
 const theaterToggle={click:null,attrs:{},addEventListener(_event,fn){this.click=fn},setAttribute(k,v){this.attrs[k]=v}};
 let portrait=true;
 const holder={};
 const reconnectButton={click:null,addEventListener(_name,cb){this.click=cb;}};
-const elements={status,placeholder,screen:holder,reconnect:reconnectButton,inputStatus,theaterStage,theaterToggle,theaterToggleLabel,theaterHint};
+const elements={status,placeholder,screen:holder,reconnect:reconnectButton,inputStatus,theaterStage,theaterToggle,theaterToggleLabel,theaterHint,theaterRemote,theaterRemoteHandle:remoteHandle};
 const documentListeners=new Map();
 const windowListeners=new Map();
 const timers=new Map();
@@ -122,6 +128,13 @@ assert(theatreClasses.has('theater-active'),'fullscreen toggle enters TV theater
 assert(theatreClasses.has('theater-rotate'),'iPhone portrait uses sideways CSS fallback');
 assert.equal(theaterToggle.attrs['aria-pressed'],'true');
 assert.match(theaterHint.textContent,/sideways/);
+const testPointer={pointerId:1,button:0,clientX:300,clientY:600,preventDefault(){}};
+remoteEvents.get('pointerdown')(testPointer);
+remoteEvents.get('pointermove')({...testPointer,clientX:210,clientY:540});
+assert.equal(remoteHandle.captureId,1,'drag captures only the handle pointer');
+assert.equal(theaterRemote.style.left,'540px','rotated portrait X delta follows screen Y');
+assert.equal(theaterRemote.style.top,'275px','rotated portrait remote remains in bounds');
+remoteEvents.get('pointerup')(testPointer);
 portrait=false;
 emit(windowListeners,'resize');
 assert(!theatreClasses.has('theater-rotate'),'landscape viewport must not remain rotated');

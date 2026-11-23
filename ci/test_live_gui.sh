@@ -28,8 +28,24 @@ curl --fail --silent -H 'Content-Type: application/json' \
   -d '{"key":"down","hold":false}' http://127.0.0.1:6080/api/key
 echo
 mkdir -p smoke-report
-python3 -m pip install --quiet playwright
+python3 -m pip install --quiet playwright python-xlib
 python3 ci/test_live_browser.py
+# The isolated X11 overlay bypasses Android/scrcpy, isolating VNC/browser time.
+python3 ci/probe_frame_pipeline.py
+# Exercise Android rendering separately, after the X11/VNC latency probe.
+for i in $(seq 1 12); do
+  adb -s emulator-5554 shell input keyevent 20 >/dev/null
+  adb -s emulator-5554 shell input keyevent 19 >/dev/null
+done
+sleep 2
+adb -s emulator-5554 shell dumpsys gfxinfo dev.tvsync.agent framestats > smoke-report/android-ui-framestats.txt || true
+adb -s emulator-5554 shell dumpsys SurfaceFlinger --list > smoke-report/android-surface-layers.txt || true
+echo 'Scrcpy recorded throughput (requires active screen changes):'
+grep -Ei '(fps|frames)' "$RUNNER_TEMP/tvsync-scrcpy.log" | tail -15 || true
+# Capture rendering pipeline and host state to distinguish input, encoding and VNC lag.
+cp "$RUNNER_TEMP/tvsync-scrcpy.log" smoke-report/scrcpy.log || true
+cp "$RUNNER_TEMP/vnc-smoke.log" smoke-report/x11vnc.log || true
+ps -eo pid,%cpu,%mem,rss,etime,args --sort=-%cpu | head -25 > smoke-report/host-processes.txt
 adb -s emulator-5554 exec-out screencap -p > smoke-report/tvsync-gui-smoke-4k.png
 cp "$RUNNER_TEMP/tvsync-4k-check.png" smoke-report/native-4k-framebuffer.png
 test -s smoke-report/tvsync-gui-smoke-4k.png

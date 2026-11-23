@@ -4,7 +4,7 @@ run-name: Secure browser emulator · TV Sync APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/tv-emulator-viewport-latency-drag-20261122]
     paths:
       - '.github/workflows/live-emulator.yml'
       - 'ci/live-emulator.html'
@@ -12,6 +12,7 @@ on:
       - 'ci/run_live_tv_session.sh'
       - 'ci/test_live_remote.py'
       - 'ci/test_live_gui.sh'
+      - 'ci/probe_frame_pipeline.py'
       - 'ci/test_live_browser.py'
       - 'ci/start_tv_mirror.sh'
       - 'ci/configure_4k_avd.sh'
@@ -21,7 +22,7 @@ on:
 
 concurrency:
   group: tvsync-${{ github.event_name == 'workflow_dispatch' && 'live-emulator' || 'gui-smoke' }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   preflight:
@@ -40,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --quiet aiohttp
-          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py ci/fast_tv_input.py ci/test_fast_input.py
+          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py ci/fast_tv_input.py ci/test_fast_input.py ci/probe_frame_pipeline.py
           bash -n ci/run_live_tv_session.sh ci/start_tv_mirror.sh ci/configure_4k_avd.sh
           python3 ci/test_fast_input.py
           python3 ci/test_live_remote.py
@@ -62,6 +63,12 @@ jobs:
           assert "new WebSocket(controlUrl())" in text
           assert 'id="theaterToggle"' in text
           assert 'id="theaterRemote"' in text
+          assert 'id="theaterRemoteHandle"' in text
+          assert 'setPointerCapture' in text
+          workflow=Path('.github/workflows/live-emulator.yml').read_text()
+          assert len([line for line in workflow.splitlines() if line.lstrip().startswith('nohup x11vnc ')]) == 2
+          assert all('-nowait_bog -nonap -sb 0 -wait 10 -defer 5' in line for line in workflow.splitlines() if line.lstrip().startswith('nohup x11vnc '))
+          assert 'placeRemote(remoteDrag.left+dx,remoteDrag.top+dy)' in text
           assert "body.theater-active.theater-rotate" in text
           print('Browser remote static validation passed.')
           PY
@@ -115,7 +122,7 @@ jobs:
           done
           DISPLAY=:99 xdpyinfo >/dev/null
           nohup openbox > "$RUNNER_TEMP/openbox-smoke.log" 2>&1 </dev/null &
-          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos > "$RUNNER_TEMP/vnc-smoke.log" 2>&1 </dev/null &
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos -nowait_bog -nonap -sb 0 -wait 10 -defer 5 > "$RUNNER_TEMP/vnc-smoke.log" 2>&1 </dev/null &
           nohup python3 ci/remote_server.py --port 6080 > "$RUNNER_TEMP/remote-smoke.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:6080/health >/dev/null; then break; fi
@@ -232,7 +239,7 @@ jobs:
           done
           DISPLAY=:99 xdpyinfo >/dev/null
           nohup openbox > "$RUNNER_TEMP/openbox.log" 2>&1 </dev/null &
-          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos \
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos -nowait_bog -nonap -sb 0 -wait 10 -defer 5 \
             > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
           nohup python3 ci/remote_server.py --port 6080 \
             > "$RUNNER_TEMP/remote-server.log" 2>&1 </dev/null &
