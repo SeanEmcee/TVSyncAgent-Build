@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070c13">
+<title>TV Sync — Live Android TV Emulator</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;--bg:#070c13;--panel:#101b28;--border:#293d4c;--focus:#2ce1eb;--muted:#9caebb}
+*{box-sizing:border-box}body{background:var(--bg);color:white;margin:0;padding:12px 12px max(12px,env(safe-area-inset-bottom))}
+header{max-width:1680px;margin:0 auto 10px;display:flex;justify-content:space-between;gap:12px;align-items:center}
+h1{font-size:18px;font-weight:700;margin:0}#status{color:#ffcd78;font-size:12px}
+.screen-wrap{margin:auto;max-width:1680px;background:#03070b;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+#screen{aspect-ratio:16/9;width:100%;position:relative;display:flex;align-items:center;justify-content:center}
+#screen canvas{max-width:100%}#placeholder{position:absolute;color:var(--muted);font-size:13px;pointer-events:none}
+.toolbar{display:flex;justify-content:space-between;align-items:center;max-width:1680px;margin:10px auto;gap:14px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--muted)}.remote{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dpad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,50px);gap:3px}
+button{background:var(--panel);border:1px solid var(--border);color:white;border-radius:9px;font:600 14px system-ui;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+button:active{background:#1d3e49;border-color:var(--focus)}button:focus-visible{outline:3px solid var(--focus)}
+.dpad button{font-size:23px}.dpad .ok{font-size:15px;border:2px solid var(--focus);color:var(--focus)}
+.extras{display:grid;grid-template-columns:repeat(2,minmax(108px,1fr));gap:8px}
+.extras button{min-height:47px;padding:8px 14px}.extras .hold{color:var(--focus);border-color:var(--focus)}
+footer{max-width:1680px;color:var(--muted);font-size:11px;line-height:1.6;margin:8px auto}
+@media(max-width:550px){body{padding:8px}.toolbar{justify-content:center}.remote{justify-content:center}.hint{text-align:center}}
+</style></head><body>
+<header><h1>TV Sync · Live Android TV</h1><span id="status" role="status">Connecting to emulator…</span></header>
+<div class="screen-wrap"><div id="screen"><span id="placeholder">Loading emulator display…</span></div></div>
+<div class="toolbar"><div class="remote">
+<div class="dpad" aria-label="Android TV remote">
+<span></span><button data-key="up" aria-label="Up">↑</button><span></span>
+<button data-key="left" aria-label="Left">←</button><button class="ok" data-key="ok">OK</button><button data-key="right" aria-label="Right">→</button>
+<span></span><button data-key="down" aria-label="Down">↓</button><span></span>
+</div><div class="extras">
+<button data-key="back">↶ Back</button><button data-key="home">⌂ Home</button>
+<button class="hold" data-key="ok" data-hold="true">Hold OK</button><button data-key="menu">☰ Menu</button>
+<button data-key="playpause">⏯ Play/Pause</button><button id="reconnect">↻ Reconnect</button>
+</div></div><div class="hint">Disposable Google TV emulator · No physical device connection<br>Tap the remote controls or use arrow keys and Enter.</div></div>
+<footer>Email-verified temporary session. Refresh to reconnect. Hold OK sends an Android long-press input.</footer>
+<script type="module">
+import RFB from './core/rfb.js';
+const status=document.getElementById('status');
+const holder=document.getElementById('screen');
+const placeholder=document.getElementById('placeholder');
+let rfb;
+function connect(){
+ if(rfb){rfb.disconnect();rfb=undefined;}
+ const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/websockify';
+ status.textContent='Connecting to emulator…';
+ rfb=new RFB(holder,url,{shared:true});
+ rfb.scaleViewport=true;rfb.resizeSession=false;rfb.viewOnly=false;
+ rfb.qualityLevel=8;rfb.compressionLevel=5;
+ rfb.addEventListener('connect',()=>{
+   status.textContent='● Connected';status.style.color='#65e4a3';placeholder.hidden=true;
+ });
+ rfb.addEventListener('disconnect',()=>{
+   status.textContent='Disconnected · Reconnect to retry';status.style.color='#ffcd78';
+ });
+ rfb.addEventListener('securityfailure',()=>{
+   status.textContent='Display authentication failed';status.style.color='#ff8d8d';
+ });
+}
+connect();
+document.getElementById('reconnect').addEventListener('click',connect);
+let busy=false;
+async function send(key,hold=false){
+ if(busy)return;
+ busy=true;
+ try{
+  const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,hold})});
+  if(!r.ok){status.textContent='Remote input unavailable';status.style.color='#ff8d8d';}
+ }catch(e){status.textContent='Remote disconnected';status.style.color='#ff8d8d';}
+ finally{busy=false;}
+}
+for(const b of document.querySelectorAll('[data-key]')){
+ b.addEventListener('click',()=>send(b.dataset.key,b.dataset.hold==='true'));
+}
+document.addEventListener('keydown',ev=>{
+ const keys={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',Enter:'ok',Escape:'back',Backspace:'back'};
+ if(keys[ev.key]&&!ev.repeat){ev.preventDefault();send(keys[ev.key]);}
+});
+</script></body></html>
