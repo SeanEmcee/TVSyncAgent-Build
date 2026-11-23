@@ -12,6 +12,18 @@ adb shell 'mkdir -p /sdcard/Download /sdcard/Movies /sdcard/Music /sdcard/Pictur
 adb shell 'touch /sdcard/demo.mp4 /sdcard/sample.txt /sdcard/sample-picture.jpg'
 adb shell am start -W -n dev.tvsync.agent/.MainActivity
 bash ci/start_tv_mirror.sh
+# Reject broken sessions before revealing the public email-verified URL.
+remote_check="$(curl --fail --silent --show-error --max-time 12 \
+  -H 'Content-Type: application/json' --data '{"key":"down","hold":false}' \
+  http://127.0.0.1:6080/api/key)" || {
+  echo "::error::Live Android emulator remote input failed; tunnel not started."
+  exit 1
+}
+if ! printf '%s' "$remote_check" | grep -q '"ok": true'; then
+  echo "::error::D-pad did not reach the Android emulator."
+  exit 1
+fi
+echo "D-pad command accepted on Android TV before tunnel publication."
 
 # The public link only appears AFTER email protection is requested.
 # cloudflared refuses to create a public tunnel when --allowed-mail protection fails.
