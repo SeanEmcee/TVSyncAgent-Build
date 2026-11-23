@@ -12,6 +12,7 @@ on:
       - 'ci/run_live_tv_session.sh'
       - 'ci/test_live_remote.py'
       - 'ci/test_live_gui.sh'
+      - 'ci/test_resume_viewer.cjs'
 
 concurrency:
   group: tvsync-${{ github.event_name == 'workflow_dispatch' && 'live-emulator' || 'gui-smoke' }}
@@ -37,6 +38,7 @@ jobs:
           python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
           bash -n ci/run_live_tv_session.sh
           python3 ci/test_live_remote.py
+          node ci/test_resume_viewer.cjs
       - name: Validate browser remote JavaScript
         shell: bash
         run: |
