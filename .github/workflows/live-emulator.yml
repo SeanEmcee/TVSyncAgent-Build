@@ -257,9 +257,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         with:
-          api-level: 34
+          api-level: 36
           target: google-tv
-          arch: x86
+          arch: x86_64
           profile: tv_4k
           cores: 4
           ram-size: 4096M
