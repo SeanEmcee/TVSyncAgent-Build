@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile ci/remote_server.py ci/fast_tv_input.py
-          bash -n ci/run_chat_embed_preview.sh ci/start_tv_mirror.sh
+          bash -n ci/run_chat_embed_preview.sh ci/start_tv_mirror.sh ci/configure_4k_avd.sh
           grep -q 'bash ci/start_tv_mirror.sh' ci/run_chat_embed_preview.sh
           grep -q 'auth_button=' ci/run_chat_embed_preview.sh
           grep -q 'emulator-5554' ci/remote_server.py
@@ -108,6 +108,8 @@ jobs:
           profile: tv_1080p
           cores: 4
           ram-size: 4096M
+          avd-name: tvsync4k
+          pre-emulator-launch-script: bash ci/configure_4k_avd.sh
           emulator-boot-timeout: 600
           disable-animations: false
           emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
