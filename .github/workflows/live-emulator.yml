@@ -4,7 +4,7 @@ run-name: Secure browser emulator · TV Sync APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/tv-emulator-viewport-latency-drag-20261122]
+    branches: [main, feature/tv-emulator-viewport-latency-drag-20261122, experiment/tvsync-gpu-host-20261122]
     paths:
       - '.github/workflows/live-emulator.yml'
       - 'ci/live-emulator.html'
@@ -144,7 +144,7 @@ jobs:
           pre-emulator-launch-script: bash ci/configure_4k_avd.sh
           emulator-boot-timeout: 600
           disable-animations: false
-          emulator-options: -gpu swiftshader -noaudio -no-boot-anim -camera-back none -no-snapshot
+          emulator-options: -gpu host -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: bash ci/test_live_gui.sh
       - name: Upload graphical emulator evidence
         if: always()
