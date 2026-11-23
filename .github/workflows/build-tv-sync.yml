@@ -68,6 +68,16 @@ jobs:
             echo "Applied private Android compatibility fix."
           fi
 
+      - name: Apply private Android compatibility patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for patch_file in source/patches/*.patch; do
+            echo "Applying private patch: $(basename "$patch_file")"
+            patch -d "$PROJECT_DIR" -p1 --batch --forward < "$patch_file"
+          done
+
       - name: Configure Java
         uses: actions/setup-java@v4
         with:
