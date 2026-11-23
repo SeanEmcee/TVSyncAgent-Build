@@ -10,6 +10,7 @@ adb shell appops set dev.tvsync.agent MANAGE_EXTERNAL_STORAGE allow || true
 adb shell 'mkdir -p /sdcard/Download /sdcard/Pictures'
 adb shell 'touch /sdcard/sample.txt /sdcard/demo.mp4'
 adb shell am start -W -n dev.tvsync.agent/.MainActivity
+bash ci/start_tv_mirror.sh
 sleep 2
 python3 - <<'PY'
 import socket
