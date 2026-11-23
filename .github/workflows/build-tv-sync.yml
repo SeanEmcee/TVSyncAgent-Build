@@ -51,6 +51,23 @@ jobs:
             exit 1
           fi
 
+      - name: Apply private source fixes to archived milestone
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f source/TVSyncAgent-native-milestone.zip ]; then
+            source_file="source/app/src/main/java/dev/tvsync/agent/EditorActivity.java"
+            target_file="$PROJECT_DIR/app/src/main/java/dev/tvsync/agent/EditorActivity.java"
+            test -f "$source_file"
+            test -f "$target_file"
+            cp "$source_file" "$target_file"
+            if grep -q 'Files.readString' "$target_file"; then
+              echo "::error::Android-incompatible Files.readString still present in text editor."
+              exit 1
+            fi
+            echo "Applied private Android compatibility fix."
+          fi
+
       - name: Configure Java
         uses: actions/setup-java@v4
         with:
