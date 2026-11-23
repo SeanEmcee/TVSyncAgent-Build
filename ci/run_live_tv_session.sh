@@ -55,7 +55,7 @@ echo "NO physical Chromecast connection, no private source code in public runner
 update_status() {
   local message="$1" body="$2" sha
   local payload
-  payload="$(printf '%s' "$body" | base64 -w0)"
+  payload="$(printf '%b' "$body" | base64 -w0)"
   sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/LIVE_EMULATOR.md" --jq '.sha' 2>/dev/null || true)"
   if [[ -n "$sha" ]]; then
     gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/LIVE_EMULATOR.md" \
