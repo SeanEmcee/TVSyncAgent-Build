@@ -23,6 +23,23 @@ async def check():
             assert response.status==400,(req,response.status)
         response=await c.get("/websockify")
         assert response.status in (400,503), response.status
-    print("Live emulator server: health, page and input-denylist checks passed.")
+    # Embedded endpoint is a separate process: no OTP login page inside the iframe,
+    # but both the remote-control API and VNC feed require a secret query token.
+    async with TestClient(TestServer(make_app(here/"missing-novnc",here/"live-emulator.html",session_token="test-session-secret"))) as c:
+        response=await c.get("/health")
+        assert response.status==200
+        response=await c.post("/api/key",json={"key":"ok"})
+        assert response.status==401
+        response=await c.get("/websockify")
+        assert response.status==401
+        response=await c.post("/api/key?session=wrong",json={"key":"ok"})
+        assert response.status==401
+        response=await c.post("/api/key?session=test-session-secret",json={"key":"unsupported"})
+        assert response.status==400
+        response=await c.get("/")
+        assert response.status==200
+        assert response.headers.get("Referrer-Policy")=="no-referrer"
+        assert response.headers.get("Cache-Control")=="no-store"
+    print("Live emulator server: health, page, input safety, and embedded token-gate tests passed.")
 
 asyncio.run(check())
