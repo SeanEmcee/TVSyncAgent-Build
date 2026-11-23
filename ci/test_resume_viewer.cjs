@@ -15,9 +15,16 @@ const screen={hidden:false};
 const status={textContent:'',style:{}};
 const placeholder={hidden:false};
 const inputStatus={textContent:'',style:{}};
+const theaterToggleLabel={textContent:'Fullscreen'};
+const theaterHint={textContent:''};
+const theaterStage={};
+const theatreClasses=new Set();
+const body={classList:{add(...names){for(const n of names)theatreClasses.add(n)},remove(...names){for(const n of names)theatreClasses.delete(n)},toggle(name,enabled){if(enabled)theatreClasses.add(name);else theatreClasses.delete(name)}}};
+const theaterToggle={click:null,attrs:{},addEventListener(_event,fn){this.click=fn},setAttribute(k,v){this.attrs[k]=v}};
+let portrait=true;
 const holder={};
 const reconnectButton={click:null,addEventListener(_name,cb){this.click=cb;}};
-const elements={status,placeholder,screen:holder,reconnect:reconnectButton,inputStatus};
+const elements={status,placeholder,screen:holder,reconnect:reconnectButton,inputStatus,theaterStage,theaterToggle,theaterToggleLabel,theaterHint};
 const documentListeners=new Map();
 const windowListeners=new Map();
 const timers=new Map();
@@ -43,12 +50,13 @@ class FakeWebSocket {
 }
 function emit(map,name){for(const cb of map.get(name)||[])cb()}
 const document={
+ body,fullscreenElement:null,
  get visibilityState(){return screen.hidden?'hidden':'visible';},
  getElementById(id){return elements[id];},
  querySelectorAll(){return [];},
  addEventListener(name,fn){documentListeners.set(name,[...(documentListeners.get(name)||[]),fn])}
 };
-const window={addEventListener(name,fn){windowListeners.set(name,[...(windowListeners.get(name)||[]),fn])}};
+const window={addEventListener(name,fn){windowListeners.set(name,[...(windowListeners.get(name)||[]),fn])},matchMedia(){return {matches:portrait}},innerWidth:390,innerHeight:844,screen:{}};
 const context=vm.createContext({
  RFB,WebSocket:FakeWebSocket,document,window,status,placeholder,holder,
  URLSearchParams,
@@ -106,4 +114,23 @@ assert(!/location\s*\.\s*(reload|assign|replace)|window\.location\s*=/.test(js),
 assert(!/localStorage|sessionStorage/.test(js),'bearer credential not copied into browser storage');
 assert.equal(controls.length>=2,true,'remote control reconnects after background suspension');
 assert.equal(controls[1].url,controls[0].url,'remote channel preserves private token after return');
-console.log('PASS: low-latency D-pad WebSocket, 6s iOS background resume, no lost token, bounded reconnect');
+const htmlButtonCount=(html.match(/data-key="(?:up|down|left|right|ok|back|home)"/g)||[]).length;
+assert(htmlButtonCount>=14,'both regular and compact remotes retain all seven key types');
+assert.equal(theaterToggle.attrs['aria-pressed'],undefined,'starts in non-theater mode');
+theaterToggle.click();
+assert(theatreClasses.has('theater-active'),'fullscreen toggle enters TV theater');
+assert(theatreClasses.has('theater-rotate'),'iPhone portrait uses sideways CSS fallback');
+assert.equal(theaterToggle.attrs['aria-pressed'],'true');
+assert.match(theaterHint.textContent,/sideways/);
+portrait=false;
+emit(windowListeners,'resize');
+assert(!theatreClasses.has('theater-rotate'),'landscape viewport must not remain rotated');
+theaterToggle.click();
+assert(!theatreClasses.has('theater-active'),'fullscreen toggle exits TV theater');
+assert(!theatreClasses.has('theater-rotate'),'portrait rotation class cleared on exit');
+assert.equal(theaterToggle.attrs['aria-pressed'],'false');
+assert.equal(theaterToggleLabel.textContent,'Fullscreen');
+assert.equal(theaterHint.textContent,'');
+assert.equal(controls[0].sent.length,3,'theater toggling must not send extraneous D-pad inputs or restart video');
+
+console.log('PASS: low-latency D-pad WebSocket, 6s iOS background resume, no lost token, bounded reconnect, landscape mini remote');
