@@ -30,6 +30,8 @@ echo
 mkdir -p smoke-report
 python3 -m pip install --quiet playwright
 python3 ci/test_live_browser.py
+echo 'Scrcpy recorded throughput (requires active screen changes):'
+grep -Ei '(fps|frames)' "$RUNNER_TEMP/tvsync-scrcpy.log" | tail -15 || true
 adb -s emulator-5554 exec-out screencap -p > smoke-report/tvsync-gui-smoke-4k.png
 cp "$RUNNER_TEMP/tvsync-4k-check.png" smoke-report/native-4k-framebuffer.png
 test -s smoke-report/tvsync-gui-smoke-4k.png
