@@ -148,15 +148,41 @@ document.getElementById('reconnect').addEventListener('click',()=>{
  connect();
 });
 connect();
-let busy=false;
-async function send(key,hold=false){
- if(busy)return;
- busy=true;
- try{
-  const r=await fetch('/api/key'+sessionQuery,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,hold})});
-  if(!r.ok){status.textContent='Remote input unavailable';status.style.color='#ff8d8d';}
- }catch(e){status.textContent='Remote disconnected';status.style.color='#ff8d8d';}
- finally{busy=false;}
+// Preserve rapid D-pad presses in order rather than silently dropping them.
+let remoteQueue=Promise.resolve();
+function send(key,hold=false){
+ remoteQueue=remoteQueue.catch(()=>{}).then(async()=>{
+  if(!isVisible())return;
+  const request=()=>fetch('/api/key'+sessionQuery,{
+   method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({key,hold})
+  });
+  try{
+   let response=await request();
+   if(response.status===503){
+    await new Promise(resolve=>setTimeout(resolve,300));
+    response=await request();
+   }
+   const type=response.headers.get('content-type')||'';
+   if(response.ok && type.includes('application/json')){
+    const body=await response.json();
+    if(body.ok){if(rfb && !accessRejected){status.textContent='● Connected';status.style.color='#65e4a3';}return;}
+   }
+   if(response.status===401||response.status===403||
+      (response.ok&&!type.includes('application/json'))){
+    status.textContent='Session authorization expired · reopen your private link';
+   }else if(response.status===503){
+    status.textContent='Android emulator input unavailable · ADB not responding';
+   }else{
+    status.textContent='Remote command failed (HTTP '+response.status+')';
+   }
+   status.style.color='#ff8d8d';
+  }catch(_){
+   status.textContent='Remote connection interrupted · reconnecting';
+   status.style.color='#ffcd78';
+   if(!rfb)scheduleReconnect();
+  }
+ });
 }
 for(const b of document.querySelectorAll('[data-key]')){
  b.addEventListener('click',()=>send(b.dataset.key,b.dataset.hold==='true'));
