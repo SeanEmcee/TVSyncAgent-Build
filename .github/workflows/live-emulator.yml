@@ -108,14 +108,14 @@ jobs:
           python3 -m pip install --quiet aiohttp
           test -f /usr/share/novnc/core/rfb.js
           ldconfig -p | grep -F 'libpulse.so.0'
-          nohup Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb-smoke.log" 2>&1 </dev/null &
+          nohup Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb-smoke.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then break; fi
             sleep 1
           done
           DISPLAY=:99 xdpyinfo >/dev/null
           nohup openbox > "$RUNNER_TEMP/openbox-smoke.log" 2>&1 </dev/null &
-          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos > "$RUNNER_TEMP/vnc-smoke.log" 2>&1 </dev/null &
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos -nowait_bog -wait 10 -defer 5 > "$RUNNER_TEMP/vnc-smoke.log" 2>&1 </dev/null &
           nohup python3 ci/remote_server.py --port 6080 > "$RUNNER_TEMP/remote-smoke.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:6080/health >/dev/null; then break; fi
@@ -225,14 +225,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          nohup Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
+          nohup Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then break; fi
             sleep 1
           done
           DISPLAY=:99 xdpyinfo >/dev/null
           nohup openbox > "$RUNNER_TEMP/openbox.log" 2>&1 </dev/null &
-          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos \
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos -nowait_bog -wait 10 -defer 5 \
             > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
           nohup python3 ci/remote_server.py --port 6080 \
             > "$RUNNER_TEMP/remote-server.log" 2>&1 </dev/null &
