@@ -4,8 +4,6 @@ import asyncio
 from pathlib import Path
 from aiohttp.test_utils import TestClient, TestServer
 from remote_server import make_app
-import remote_server
-from unittest.mock import patch
 
 async def check():
     here=Path(__file__).resolve().parent
@@ -38,23 +36,31 @@ async def check():
         assert response.status==401
         response=await c.post("/api/key?session=test-session-secret",json={"key":"unsupported"})
         assert response.status==400
-        # A valid, authenticated key must actually reach the emulator ADB target.
-        class FakeProc:
-            returncode=0
-            async def communicate(self): return (b"",b"")
-        async def mock_adb(*cmd,**kwargs):
-            assert cmd[:4]==("adb","-s","emulator-5554","shell")
-            assert cmd[-1]=="22" # D-pad RIGHT key
-            return FakeProc()
-        with patch.object(remote_server.asyncio,"create_subprocess_exec",side_effect=mock_adb):
-            response=await c.post("/api/key?session=test-session-secret",
-                                  json={"key":"right","hold":False})
-            assert response.status==200,(response.status,await response.text())
-            assert (await response.json())["ok"] is True
+        # HTTP fallback must confirm processing through the persistent bridge.
+        class FakeInput:
+            async def send(self,code,hold=False):
+                assert code==22 and hold is False
+                future=asyncio.get_running_loop().create_future()
+                future.set_result(12.3)
+                return future
+        c.server.app["input"]=FakeInput()
+        response=await c.post("/api/key?session=test-session-secret",
+                              json={"key":"right","hold":False})
+        assert response.status==200,(response.status,await response.text())
+        body=await response.json()
+        assert body["ok"] is True and body["device_ms"]==12.3
+        # The WebSocket path avoids HTTP round-trip serialization for each key.
+        channel=await c.ws_connect("/remote-ws?session=test-session-secret")
+        await channel.send_json({"id":1,"key":"right","hold":False})
+        first=await channel.receive_json()
+        second=await channel.receive_json()
+        assert first=={"id":1,"queued":True},first
+        assert second["delivered"] is True and second["device_ms"]==12.3,second
+        await channel.close()
         response=await c.get("/")
         assert response.status==200
         assert response.headers.get("Referrer-Policy")=="no-referrer"
         assert response.headers.get("Cache-Control")=="no-store"
-    print("Live emulator server: health, page, input safety, and embedded token-gate tests passed.")
+    print("PASS: authentication, fixed-key HTTP fallback and low-overhead WebSocket remote protocol")
 
 asyncio.run(check())
