@@ -70,7 +70,6 @@ jobs:
 
       - name: Verify project and run source tests
         shell: bash
-        shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
