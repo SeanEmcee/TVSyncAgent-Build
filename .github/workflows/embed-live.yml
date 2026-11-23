@@ -87,7 +87,7 @@ jobs:
             --output "$RUNNER_TEMP/cloudflared.deb" \
             https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i "$RUNNER_TEMP/cloudflared.deb"
-          nohup Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac \
+          nohup Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac \
             > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
           for i in $(seq 1 25); do
             if DISPLAY=:99 xdpyinfo > /dev/null 2>&1; then break; fi
