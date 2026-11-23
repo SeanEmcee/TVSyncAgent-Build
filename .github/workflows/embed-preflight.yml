@@ -37,7 +37,7 @@ jobs:
           browser = Path('ci/live-emulator.html').read_text()
           script = Path('ci/run_live_tv_session.sh').read_text()
           assert "fetch('/api/key'+sessionQuery" in browser
-          assert "'/websockify'+sessionQuery" in browser
+          assert "'/websockify' + sessionQuery" in browser
           assert "TVSYNC_EMBED_TOKEN" in script
           assert "PRIVATE_EMULATOR_EMBED.md" in script
           assert "unauth_code" in script and '"401"' in script
