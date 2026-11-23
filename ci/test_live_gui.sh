@@ -28,6 +28,8 @@ curl --fail --silent -H 'Content-Type: application/json' \
   -d '{"key":"down","hold":false}' http://127.0.0.1:6080/api/key
 echo
 mkdir -p smoke-report
+python3 -m pip install --quiet playwright
+python3 ci/test_live_browser.py
 adb -s emulator-5554 exec-out screencap -p > smoke-report/tvsync-gui-smoke-4k.png
 cp "$RUNNER_TEMP/tvsync-4k-check.png" smoke-report/native-4k-framebuffer.png
 test -s smoke-report/tvsync-gui-smoke-4k.png
