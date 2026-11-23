@@ -35,6 +35,22 @@ jobs:
           persist-credentials: false
           path: source
 
+      - name: Resolve private source project
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f source/settings.gradle.kts ]; then
+            echo "PROJECT_DIR=$GITHUB_WORKSPACE/source" >> "$GITHUB_ENV"
+          elif [ -f source/TVSyncAgent-native-milestone.zip ]; then
+            mkdir -p project
+            unzip -q source/TVSyncAgent-native-milestone.zip -d project
+            test -f project/TVSyncAgent/settings.gradle.kts
+            echo "PROJECT_DIR=$GITHUB_WORKSPACE/project/TVSyncAgent" >> "$GITHUB_ENV"
+          else
+            echo "::error::Private repository has no Android source. Upload TVSyncAgent-native-milestone.zip or commit the unpacked project."
+            exit 1
+          fi
+
       - name: Configure Java
         uses: actions/setup-java@v4
         with:
@@ -54,26 +70,29 @@ jobs:
 
       - name: Verify project and run source tests
         shell: bash
-        working-directory: source
+        shell: bash
         run: |
           set -euo pipefail
+          cd "$PROJECT_DIR"
           test -f settings.gradle.kts
           test -f app/build.gradle.kts
           python3 tools/test_menu_positioner.py
           python3 tools/test_browser_state.py
 
       - name: Compile and lint Android TV application
-        working-directory: source
-        run: gradle --no-daemon :app:assembleDebug :app:lintDebug --stacktrace
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+          gradle --no-daemon :app:assembleDebug :app:lintDebug --stacktrace
 
       - name: Verify APK exists
         shell: bash
-        run: test -s source/app/build/outputs/apk/debug/app-debug.apk
+        run: test -s "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: TVSyncAgent-debug-apk
-          path: source/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
