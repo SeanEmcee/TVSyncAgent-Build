@@ -9,6 +9,7 @@ import hmac
 import os
 from pathlib import Path
 from aiohttp import WSMsgType, web
+from fast_tv_input import FastInput, InputBusy, InputUnavailable
 
 KEYS = {"up":19,"down":20,"left":21,"right":22,"ok":23,"back":4,
         "home":3,"menu":82,"playpause":85}
@@ -35,51 +36,77 @@ async def health(request):
 async def index(request):
     return web.FileResponse(request.app["index_file"])
 
-async def remote_key(request):
-    check_session(request)
-    try:
-        data=await request.json()
-    except (ValueError,json.JSONDecodeError):
-        raise web.HTTPBadRequest(text="Invalid JSON")
-    if not isinstance(data,dict):
+def parse_key(data):
+    if not isinstance(data, dict):
         raise web.HTTPBadRequest(text="Invalid request")
     key=data.get("key")
     hold=data.get("hold",False)
     if key not in KEYS or type(hold) is not bool or (hold and key!="ok"):
         raise web.HTTPBadRequest(text="Unsupported TV remote action")
-    # Target ONLY the disposable emulator, never an unrelated ADB device.
-    # Serialize key events to preserve D-pad order across browser requests.
-    command=["adb","-s","emulator-5554","shell","input","keyevent"]
-    if hold: command.append("--longpress")
-    command.append(str(KEYS[key]))
-    async with request.app["remote_lock"]:
-        for attempt in range(2):
-            try:
-                proc=await asyncio.create_subprocess_exec(
-                    *command,stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE)
-                try:
-                    stdout,stderr=await asyncio.wait_for(proc.communicate(),timeout=8)
-                except asyncio.TimeoutError:
-                    proc.kill()
-                    await proc.wait()
-                    return web.json_response(
-                        {"ok":False,"error":"adb_timeout","retryable":True},status=503)
-            except OSError:
-                return web.json_response(
-                    {"ok":False,"error":"adb_not_found","retryable":False},status=503)
-            if proc.returncode == 0:
-                return web.json_response({"ok":True,"key":key,"hold":hold})
-            detail=stderr.decode("utf-8","replace")[:180].strip()
-            print("TV Sync emulator input failed (code {}): {}".format(proc.returncode,detail),
-                  flush=True)
-            if attempt == 0 and ("offline" in detail.lower() or "not found" in detail.lower()
-                                or "no devices" in detail.lower()):
-                await asyncio.sleep(.2)
+    return key,hold
+
+
+async def remote_key(request):
+    """HTTP fallback for diagnostics and clients without WebSockets."""
+    check_session(request)
+    try:
+        data=await request.json()
+    except (ValueError, json.JSONDecodeError):
+        raise web.HTTPBadRequest(text="Invalid JSON")
+    key,hold=parse_key(data)
+    try:
+        future=await request.app["input"].send(KEYS[key],hold)
+        # Unlike a fast queued send, the diagnostic HTTP endpoint confirms
+        # that Android processed the key before reporting success.
+        delay=await asyncio.wait_for(asyncio.shield(future),timeout=4.0)
+        return web.json_response({"ok":True,"key":key,"hold":hold,"device_ms":delay})
+    except InputBusy:
+        return web.json_response({"ok":False,"error":"input_queue_full"},status=429)
+    except (InputUnavailable, asyncio.TimeoutError):
+        return web.json_response({"ok":False,"error":"android_input_stalled"},status=503)
+
+
+async def remote_ws(request):
+    """Independent low-overhead, ordered D-pad channel; never exposes ADB shell."""
+    check_session(request)
+    ws=web.WebSocketResponse(heartbeat=20,max_msg_size=256)
+    await ws.prepare(request)
+    pending=set()
+
+    async def acknowledge(future,identifier):
+        try:
+            delay=await asyncio.wait_for(asyncio.shield(future),timeout=4.0)
+            if not ws.closed:
+                await ws.send_json({"id":identifier,"delivered":True,"device_ms":delay})
+        except (InputUnavailable, asyncio.TimeoutError, asyncio.CancelledError):
+            if not ws.closed:
+                await ws.send_json({"id":identifier,"error":"android_input_stalled"})
+
+    try:
+        async for msg in ws:
+            if msg.type != WSMsgType.TEXT:
                 continue
-            return web.json_response(
-                {"ok":False,"error":"adb_command_failed","retryable":True},status=503)
-    return web.json_response({"ok":False,"error":"adb_unavailable"},status=503)
+            try:
+                data=json.loads(msg.data)
+                key,hold=parse_key(data)
+                identifier=data.get("id")
+                if type(identifier) is not int or identifier<0 or identifier>2147483647:
+                    raise ValueError("Invalid remote input ID")
+                future=await request.app["input"].send(KEYS[key],hold)
+                await ws.send_json({"id":identifier,"queued":True})
+                task=asyncio.create_task(acknowledge(future,identifier))
+                pending.add(task)
+                task.add_done_callback(pending.discard)
+            except (ValueError, web.HTTPBadRequest):
+                await ws.send_json({"error":"invalid_remote_command"})
+            except InputBusy:
+                await ws.send_json({"error":"input_queue_full"})
+            except InputUnavailable:
+                await ws.send_json({"error":"android_input_stalled"})
+    finally:
+        for task in pending:
+            task.cancel()
+    return ws
 
 async def vnc_socket(request):
     """Bridge WebSocket RFB bytes only to localhost VNC, no general TCP proxy."""
@@ -120,11 +147,12 @@ async def vnc_socket(request):
 def make_app(novnc_root:Path,index_file:Path,session_token=""):
     app=web.Application(client_max_size=4096,middlewares=[security_headers])
     app["session_token"] = session_token
-    app["remote_lock"] = asyncio.Lock()
+    app["input"] = FastInput(serial="emulator-5554")
     app["index_file"]=index_file
     app.router.add_get("/",index)
     app.router.add_get("/health",health)
     app.router.add_post("/api/key",remote_key)
+    app.router.add_get("/remote-ws",remote_ws)
     app.router.add_get("/websockify",vnc_socket)
     for folder in ("core","vendor","app"):
         path=novnc_root/folder
