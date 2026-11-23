@@ -14,6 +14,8 @@ on:
       - 'ci/test_live_gui.sh'
       - 'ci/start_tv_mirror.sh'
       - 'ci/test_resume_viewer.cjs'
+      - 'ci/fast_tv_input.py'
+      - 'ci/test_fast_input.py'
 
 concurrency:
   group: tvsync-${{ github.event_name == 'workflow_dispatch' && 'live-emulator' || 'gui-smoke' }}
@@ -36,8 +38,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --quiet aiohttp
-          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
+          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py ci/fast_tv_input.py ci/test_fast_input.py
           bash -n ci/run_live_tv_session.sh ci/start_tv_mirror.sh
+          python3 ci/test_fast_input.py
           python3 ci/test_live_remote.py
           node ci/test_resume_viewer.cjs
       - name: Validate browser remote JavaScript
@@ -50,6 +53,7 @@ jobs:
           assert "import RFB from './core/rfb.js'" in text
           assert '/websockify' in text
           assert '/api/key' in text
+          assert '/remote-ws' in text
           assert 'viewer.viewOnly = true' in text
           assert 'cursor:none!important' in text
           assert "'/websockify' + sessionQuery" in text
@@ -76,7 +80,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: TVSyncAgent-debug-apk
-          run-id: 45089002708
+          run-id: 45097065401
           repository: SeanEmcee/TVSyncAgent-Build
           github-token: ${{ github.token }}
           path: apk
@@ -122,8 +126,8 @@ jobs:
           target: google-tv
           arch: x86
           profile: tv_1080p
-          cores: 2
-          ram-size: 2048M
+          cores: 4
+          ram-size: 4096M
           emulator-boot-timeout: 600
           disable-animations: false
           emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
@@ -174,7 +178,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: TVSyncAgent-debug-apk
-          run-id: 45089002708
+          run-id: 45097065401
           repository: SeanEmcee/TVSyncAgent-Build
           github-token: ${{ github.token }}
           path: apk
@@ -251,8 +255,8 @@ jobs:
           target: google-tv
           arch: x86
           profile: tv_1080p
-          cores: 2
-          ram-size: 2048M
+          cores: 4
+          ram-size: 4096M
           emulator-boot-timeout: 600
           disable-animations: false
           emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
