@@ -11,6 +11,7 @@ adb shell appops set dev.tvsync.agent MANAGE_EXTERNAL_STORAGE allow || true
 adb shell 'mkdir -p /sdcard/Download /sdcard/Movies /sdcard/Music /sdcard/Pictures'
 adb shell 'touch /sdcard/demo.mp4 /sdcard/sample.txt /sdcard/sample-picture.jpg'
 adb shell am start -W -n dev.tvsync.agent/.MainActivity
+bash ci/start_tv_mirror.sh
 
 # The public link only appears AFTER email protection is requested.
 # cloudflared refuses to create a public tunnel when --allowed-mail protection fails.
