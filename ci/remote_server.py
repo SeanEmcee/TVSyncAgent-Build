@@ -5,11 +5,29 @@ All external access MUST go through cloudflared tunnel --allowed-mail.
 import argparse
 import asyncio
 import json
+import hmac
+import os
 from pathlib import Path
 from aiohttp import WSMsgType, web
 
 KEYS = {"up":19,"down":20,"left":21,"right":22,"ok":23,"back":4,
         "home":3,"menu":82,"playpause":85}
+
+def check_session(request):
+    """Protect controls/screens with a per-run 256-bit bearer token for embedding.
+    The ordinary email-verified viewer uses a separate, non-token server instance.
+    """
+    expected = request.app["session_token"]
+    if expected and not hmac.compare_digest(request.query.get("session", ""), expected):
+        raise web.HTTPUnauthorized(text="Private emulator session token required")
+
+@web.middleware
+async def security_headers(request, handler):
+    response = await handler(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 async def health(request):
     return web.json_response({"ready": True, "service": "tv-sync-live-emulator"})
@@ -18,6 +36,7 @@ async def index(request):
     return web.FileResponse(request.app["index_file"])
 
 async def remote_key(request):
+    check_session(request)
     try:
         data=await request.json()
     except (ValueError,json.JSONDecodeError):
@@ -48,6 +67,7 @@ async def remote_key(request):
 
 async def vnc_socket(request):
     """Bridge WebSocket RFB bytes only to localhost VNC, no general TCP proxy."""
+    check_session(request)
     try:
         reader,writer=await asyncio.wait_for(
             asyncio.open_connection("127.0.0.1",5900),timeout=5)
@@ -81,8 +101,9 @@ async def vnc_socket(request):
         await ws.close()
     return ws
 
-def make_app(novnc_root:Path,index_file:Path):
-    app=web.Application(client_max_size=4096)
+def make_app(novnc_root:Path,index_file:Path,session_token=""):
+    app=web.Application(client_max_size=4096,middlewares=[security_headers])
+    app["session_token"] = session_token
     app["index_file"]=index_file
     app.router.add_get("/",index)
     app.router.add_get("/health",health)
@@ -98,8 +119,9 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--port",type=int,default=6080)
     p.add_argument("--no-vnc",default="/usr/share/novnc")
+    p.add_argument("--session-token",default=os.getenv("TVSYNC_EMBED_TOKEN", ""))
     args=p.parse_args()
-    app=make_app(Path(args.no_vnc),Path(__file__).with_name("live-emulator.html"))
+    app=make_app(Path(args.no_vnc),Path(__file__).with_name("live-emulator.html"),args.session_token)
     web.run_app(app,host="127.0.0.1",port=args.port,access_log=None)
 
 if __name__ == "__main__":
