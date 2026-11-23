@@ -52,7 +52,7 @@ jobs:
           text=Path('ci/live-emulator.html').read_text()
           assert "import RFB from './core/rfb.js'" in text
           assert '/websockify' in text
-          assert '/api/key' in text
+          assert 'app.router.add_post("/api/key",remote_key)' in Path('ci/remote_server.py').read_text()
           assert '/remote-ws' in text
           assert 'viewer.viewOnly = true' in text
           assert 'cursor:none!important' in text
