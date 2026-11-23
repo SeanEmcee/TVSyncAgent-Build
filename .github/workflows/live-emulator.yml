@@ -1,0 +1,168 @@
+name: TV Sync — Interactive Google TV Emulator
+run-name: Secure browser emulator · TV Sync APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/live-emulator.yml'
+      - 'ci/live-emulator.html'
+      - 'ci/remote_server.py'
+      - 'ci/run_live_tv_session.sh'
+      - 'ci/test_live_remote.py'
+
+concurrency:
+  group: tvsync-live-emulator
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Validate emulator web remote
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate server syntax and input safety
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet aiohttp
+          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
+          python3 ci/test_live_remote.py
+      - name: Validate browser remote JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('ci/live-emulator.html').read_text()
+          assert "import RFB from './core/rfb.js'" in text
+          assert '/websockify' in text
+          assert '/api/key' in text
+          print('Browser remote static validation passed.')
+          PY
+
+  emulator:
+    name: Launch protected live Google TV session
+    needs: preflight
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: write
+      actions: read
+    env:
+      DISPLAY: ':99'
+      TVSYNC_EMULATOR_EMAIL: ${{ secrets.TVSYNC_EMULATOR_EMAIL }}
+    steps:
+      - name: Require secure email-restricted tunnel
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${TVSYNC_EMULATOR_EMAIL:-}" ]]; then
+            echo "::error::Missing repository Actions secret TVSYNC_EMULATOR_EMAIL. Save your email address there first. No tunnel started."
+            exit 1
+          fi
+          if [[ ! "$TVSYNC_EMULATOR_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}$ ]]; then
+            echo "::error::TVSYNC_EMULATOR_EMAIL must contain one valid email address. No tunnel started."
+            exit 1
+          fi
+          echo "Protected access configured; email value will not be printed."
+
+      - name: Check out browser remote code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Retrieve verified Android TV APK
+        uses: actions/download-artifact@v4
+        with:
+          name: TVSyncAgent-debug-apk
+          run-id: 45089002708
+          repository: SeanEmcee/TVSyncAgent-Build
+          github-token: ${{ github.token }}
+          path: apk
+
+      - name: Install Java and Android SDK tools
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Python for web remote
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install browser display and protected tunnel
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb x11vnc openbox novnc xdotool
+          python3 -m pip install --quiet aiohttp
+          test -f /usr/share/novnc/core/rfb.js
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$RUNNER_TEMP/cloudflared.deb" \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i "$RUNNER_TEMP/cloudflared.deb"
+          cloudflared --version
+
+      - name: Start isolated X11 display and browser proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup Xvfb :99 -screen 0 1920x1200x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
+          for i in $(seq 1 20); do
+            if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          DISPLAY=:99 xdpyinfo >/dev/null
+          nohup openbox > "$RUNNER_TEMP/openbox.log" 2>&1 </dev/null &
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet \
+            > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
+          nohup python3 ci/remote_server.py --port 6080 \
+            > "$RUNNER_TEMP/remote-server.log" 2>&1 </dev/null &
+          for i in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:6080/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:6080/health
+          echo
+          echo "Loopback browser server and virtual TV display ready."
+
+      - name: Enable Android emulator acceleration
+        shell: bash
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod a+rw /dev/kvm
+          else
+            echo "::warning::KVM unavailable; emulation may run slowly."
+          fi
+
+      - name: Boot Android 14 Google TV, install APK and open protected web session
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          api-level: 34
+          target: google-tv
+          arch: x86
+          profile: tv_1080p
+          cores: 2
+          ram-size: 2048M
+          emulator-boot-timeout: 600
+          disable-animations: false
+          emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash ci/run_live_tv_session.sh
