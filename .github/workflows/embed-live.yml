@@ -1,0 +1,111 @@
+name: TV Sync — Private In-Chat Emulator Test
+run-name: Temporary private embedded Google TV session
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/embed-live.yml'
+
+concurrency:
+  group: tvsync-embedded-visual-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  emulator:
+    name: Protected disposable Android TV embed
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      DISPLAY: ':99'
+      TVSYNC_PRIVATE_SOURCE_TOKEN: ${{ secrets.TVSYNC_PRIVATE_SOURCE_TOKEN }}
+    steps:
+      - name: Require private destination for short-lived access link
+        shell: bash
+        run: |
+          if [[ -z "${TVSYNC_PRIVATE_SOURCE_TOKEN:-}" ]]; then
+            echo "::error::Missing private repository credential. No public tunnel started."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check secure viewer code before emulator starts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile ci/remote_server.py
+          bash -n ci/run_chat_embed_preview.sh
+          grep -q 'check_session(request)' ci/remote_server.py
+          grep -q 'hmac.compare_digest' ci/remote_server.py
+
+      - name: Retrieve proven Android TV APK
+        uses: actions/download-artifact@v4
+        with:
+          name: TVSyncAgent-debug-apk
+          run-id: 45089002708
+          repository: SeanEmcee/TVSyncAgent-Build
+          github-token: ${{ github.token }}
+          path: apk
+
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Python for browser remote
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up isolated display and private-token browser viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb x11vnc openbox novnc xdotool x11-utils libpulse0
+          python3 -m pip install --quiet aiohttp
+          test -f /usr/share/novnc/core/rfb.js
+          ldconfig -p | grep -F 'libpulse.so.0'
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$RUNNER_TEMP/cloudflared.deb" \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i "$RUNNER_TEMP/cloudflared.deb"
+          nohup Xvfb :99 -screen 0 1920x1200x24 -nolisten tcp -ac \
+            > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
+          for i in $(seq 1 25); do
+            if DISPLAY=:99 xdpyinfo > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          DISPLAY=:99 xdpyinfo > /dev/null
+          nohup openbox > "$RUNNER_TEMP/openbox.log" 2>&1 </dev/null &
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet \
+            -nocursor -nocursorshape -nocursorpos \
+            > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
+          if [[ -e /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; fi
+
+      - name: Boot Android 14 Google TV and open token-gated chat screen
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google-tv
+          arch: x86
+          profile: tv_1080p
+          cores: 2
+          ram-size: 2048M
+          emulator-boot-timeout: 600
+          disable-animations: false
+          emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash ci/run_chat_embed_preview.sh
