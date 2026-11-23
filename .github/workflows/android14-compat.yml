@@ -1,0 +1,73 @@
+name: TV Sync — Android 14 App Compatibility
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android14-compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  android14:
+    name: Install, launch and exercise TV Sync APK on Android 14
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve existing successfully built TV Sync APK
+        uses: actions/download-artifact@v4
+        with:
+          name: TVSyncAgent-debug-apk
+          run-id: 45097065401
+          repository: SeanEmcee/TVSyncAgent-Build
+          github-token: ${{ github.token }}
+          path: apk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Boot Android 14 Android TV and exercise package
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          cores: 4
+          ram-size: 4096M
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader -noaudio -no-boot-anim -no-snapshot
+          script: |
+            set -euo pipefail
+            sdk="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+            echo "Android API: $sdk"
+            test "$sdk" = "34"
+            test -s apk/app-debug.apk
+            adb install -r apk/app-debug.apk
+            adb shell am start -W -n dev.tvsync.agent/.MainActivity
+            adb shell pidof dev.tvsync.agent
+            adb shell input keyevent 20
+            adb shell pidof dev.tvsync.agent
+            mkdir -p smoke-report
+            adb exec-out screencap -p > smoke-report/android14-app.png
+            python3 - <<'PY'
+            import pathlib, struct
+            png=pathlib.Path('smoke-report/android14-app.png').read_bytes()
+            assert png[:8] == b'\x89PNG\r\n\x1a\n'
+            width,height=struct.unpack('>II',png[16:24])
+            assert width >= 1280 and height >= 720,(width,height)
+            print('ANDROID14_PASS: app installed, activity running, input sent, frame captured',width,height)
+            PY
+      - name: Store Android 14 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVSyncAgent-android14-compat
+          path: smoke-report/
+          if-no-files-found: warn
+          retention-days: 7
