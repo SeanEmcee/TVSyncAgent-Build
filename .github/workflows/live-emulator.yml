@@ -46,6 +46,8 @@ jobs:
           assert "import RFB from './core/rfb.js'" in text
           assert '/websockify' in text
           assert '/api/key' in text
+          assert 'rfb.viewOnly=true' in text
+          assert 'cursor:none!important' in text
           print('Browser remote static validation passed.')
           PY
 
@@ -98,7 +100,7 @@ jobs:
           done
           DISPLAY=:99 xdpyinfo >/dev/null
           nohup openbox > "$RUNNER_TEMP/openbox-smoke.log" 2>&1 </dev/null &
-          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet > "$RUNNER_TEMP/vnc-smoke.log" 2>&1 </dev/null &
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos > "$RUNNER_TEMP/vnc-smoke.log" 2>&1 </dev/null &
           nohup python3 ci/remote_server.py --port 6080 > "$RUNNER_TEMP/remote-smoke.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if curl --fail --silent http://127.0.0.1:6080/health >/dev/null; then break; fi
@@ -212,7 +214,7 @@ jobs:
           done
           DISPLAY=:99 xdpyinfo >/dev/null
           nohup openbox > "$RUNNER_TEMP/openbox.log" 2>&1 </dev/null &
-          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet \
+          nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet -nocursor -nocursorshape -nocursorpos \
             > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
           nohup python3 ci/remote_server.py --port 6080 \
             > "$RUNNER_TEMP/remote-server.log" 2>&1 </dev/null &
