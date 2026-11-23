@@ -26,8 +26,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 adb wait-for-device
-adb shell wm size 1920x1080
-adb shell wm density 240
+adb -s emulator-5554 shell wm size 3840x2160
+adb -s emulator-5554 shell wm density 320
 adb install -r apk/app-debug.apk
 adb shell appops set dev.tvsync.agent MANAGE_EXTERNAL_STORAGE allow || true
 adb shell 'mkdir -p /sdcard/Download /sdcard/Movies /sdcard/Pictures'
