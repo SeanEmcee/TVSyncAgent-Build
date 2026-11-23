@@ -67,7 +67,85 @@ update_status() {
 }
 update_status "Mark TV Sync live emulator online" \
   "# TV Sync live emulator\n\n[**Open your protected interactive emulator**]($url)\n\nThis temporary Google TV instance is protected by an email one-time code.\n\n[Live build and logs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)\n"
+# Optional private-link embed for clients that cannot frame Cloudflare's
+# email-login page. This is a separate tunnel with independent strong bearer
+# authentication, not an unauthenticated port to the TV.
+embed_cloud_pid=""
+embed_server_pid=""
+embed_private_published=false
+if [[ -n "${TVSYNC_PRIVATE_SOURCE_TOKEN:-}" ]]; then
+  embed_token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+  TVSYNC_EMBED_TOKEN="$embed_token" nohup python3 ci/remote_server.py --port 6081 \
+    >"$RUNNER_TEMP/tvsync-embed-server.log" 2>&1 </dev/null &
+  embed_server_pid=$!
+  for i in $(seq 1 20); do
+    if curl --silent --fail http://127.0.0.1:6081/health >/dev/null; then break; fi
+    sleep 1
+  done
+  # Any attempt to invoke the emulator without the per-run token must fail.
+  unauth_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    -H 'Content-Type: application/json' --data '{"key":"ok"}' \
+    http://127.0.0.1:6081/api/key || true)"
+  if [[ "$unauth_code" == "401" ]]; then
+    embed_log="$RUNNER_TEMP/tvsync-embed-cloudflared.log"
+    cloudflared tunnel --url http://127.0.0.1:6081 --output json \
+      >"$embed_log" 2>&1 &
+    embed_cloud_pid=$!
+    embed_base=""
+    for i in $(seq 1 45); do
+      if ! kill -0 "$embed_cloud_pid" 2>/dev/null; then break; fi
+      embed_base="$(grep -Eo 'https://[a-z0-9-]+[.]trycloudflare[.]com' "$embed_log" | head -1 || true)"
+      if [[ -n "$embed_base" ]]; then break; fi
+      sleep 2
+    done
+    if [[ -n "$embed_base" ]]; then
+      # Never print this URL or token to the public build log/repository.
+      embed_url="$embed_base/?session=$embed_token"
+      embed_body="# TV Sync — Private Chat Embed\n\n[Open the temporary secure embedded emulator]($embed_url)\n\nThis is a **bearer access link** for an isolated synthetic-data test emulator. Anyone with the link can control this temporary instance. Do not share it. It expires when the session ends. The standard Cloudflare email-protected link remains available separately.\n\n[Session run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)\n"
+      embed_payload="$(printf '%b' "$embed_body" | base64 -w0)"
+      private_path="repos/SeanEmcee/TVSyncAgent/contents/PRIVATE_EMULATOR_EMBED.md"
+      previous_sha="$(GH_TOKEN="$TVSYNC_PRIVATE_SOURCE_TOKEN" gh api "$private_path" --jq '.sha' 2>/dev/null || true)"
+      if [[ -n "$previous_sha" ]]; then
+        if GH_TOKEN="$TVSYNC_PRIVATE_SOURCE_TOKEN" gh api --method PUT "$private_path" \
+            -f message="Publish temporary private emulator embed session" \
+            -f content="$embed_payload" -f sha="$previous_sha" >/dev/null 2>&1; then
+          embed_private_published=true
+        fi
+      else
+        if GH_TOKEN="$TVSYNC_PRIVATE_SOURCE_TOKEN" gh api --method PUT "$private_path" \
+            -f message="Publish temporary private emulator embed session" \
+            -f content="$embed_payload" >/dev/null 2>&1; then
+          embed_private_published=true
+        fi
+      fi
+    fi
+  else
+    echo "::warning::Private embed gate refused unauthenticated test incorrectly; embed tunnel disabled."
+  fi
+  if [[ "$embed_private_published" == true ]]; then
+    echo "::notice title=TV Sync Secure Chat Embed::The short-lived embed link is in the PRIVATE TVSyncAgent repository's PRIVATE_EMULATOR_EMBED.md file."
+  else
+    echo "::warning::Private embed unavailable; the existing email-verified live viewer remains protected."
+    if [[ -n "$embed_cloud_pid" ]]; then kill "$embed_cloud_pid" 2>/dev/null || true; fi
+    if [[ -n "$embed_server_pid" ]]; then kill "$embed_server_pid" 2>/dev/null || true; fi
+  fi
+else
+  echo "::warning::TVSYNC_PRIVATE_SOURCE_TOKEN not configured; email-protected viewer runs normally, private embed disabled."
+fi
+
 cleanup() {
+  if [[ "$embed_private_published" == true ]]; then
+    private_path="repos/SeanEmcee/TVSyncAgent/contents/PRIVATE_EMULATOR_EMBED.md"
+    previous_sha="$(GH_TOKEN="$TVSYNC_PRIVATE_SOURCE_TOKEN" gh api "$private_path" --jq '.sha' 2>/dev/null || true)"
+    offline_payload="$(printf '# TV Sync private embed\n\n**Offline.** Launch a new session from the public GitHub workflow.\n' | base64 -w0)"
+    if [[ -n "$previous_sha" ]]; then
+      GH_TOKEN="$TVSYNC_PRIVATE_SOURCE_TOKEN" gh api --method PUT "$private_path" \
+        -f message="Expire private emulator embed link" \
+        -f content="$offline_payload" -f sha="$previous_sha" >/dev/null 2>&1 || true
+    fi
+  fi
+  if [[ -n "$embed_cloud_pid" ]]; then kill "$embed_cloud_pid" 2>/dev/null || true; fi
+  if [[ -n "$embed_server_pid" ]]; then kill "$embed_server_pid" 2>/dev/null || true; fi
   update_status "Mark TV Sync emulator session offline" \
     "# TV Sync live emulator\n\n**Offline** — no active session confirmed.\n\nStart a new run from [TV Sync Live Emulator Actions](https://github.com/SeanEmcee/TVSyncAgent-Build/actions/workflows/live-emulator.yml).\n"
   kill "$cloud_pid" 2>/dev/null || true
