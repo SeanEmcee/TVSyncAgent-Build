@@ -82,6 +82,16 @@ jobs:
             patch -d "$PROJECT_DIR" -p1 --batch --forward < "$patch_file"
           done
 
+      - name: Install private navigation source into archived Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper="source/app/src/main/java/dev/tvsync/agent/SidebarNavigation.java"
+          test -f "$helper"
+          mkdir -p "$PROJECT_DIR/app/src/main/java/dev/tvsync/agent"
+          cp "$helper" "$PROJECT_DIR/app/src/main/java/dev/tvsync/agent/SidebarNavigation.java"
+          grep -q 'SidebarNavigation.atLeftBoundary' "$PROJECT_DIR/app/src/main/java/dev/tvsync/agent/TvCanvas.java"
+
       - name: Configure Java
         uses: actions/setup-java@v4
         with:
@@ -110,6 +120,11 @@ jobs:
           test -f app/build.gradle.kts
           python3 tools/test_menu_positioner.py
           python3 tools/test_browser_state.py
+          mkdir -p "$RUNNER_TEMP/tvsync-nav-tests"
+          javac -d "$RUNNER_TEMP/tvsync-nav-tests" \
+            "$GITHUB_WORKSPACE/source/app/src/main/java/dev/tvsync/agent/SidebarNavigation.java" \
+            "$GITHUB_WORKSPACE/source/tests/SidebarNavigationTest.java"
+          java -cp "$RUNNER_TEMP/tvsync-nav-tests" SidebarNavigationTest
 
       - name: Compile and lint Android TV application
         shell: bash
