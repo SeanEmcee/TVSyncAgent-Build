@@ -66,7 +66,7 @@ jobs:
           assert 'id="theaterRemoteHandle"' in text
           assert 'setPointerCapture' in text
           workflow=Path('.github/workflows/live-emulator.yml').read_text()
-          assert workflow.count('-nowait_bog -nonap -sb 0 -wait 10 -defer 5') == 2
+          assert sum(1 for line in workflow.splitlines() if 'nohup x11vnc' in line and '-nowait_bog -nonap -sb 0 -wait 10 -defer 5' in line) == 2
           assert 'placeRemote(remoteDrag.left+dx,remoteDrag.top+dy)' in text
           assert "body.theater-active.theater-rotate" in text
           print('Browser remote static validation passed.')
