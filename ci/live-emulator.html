@@ -8,7 +8,7 @@
 :root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;--bg:#070c13;--panel:#101b28;--border:#293d4c;--focus:#2ce1eb;--muted:#9caebb}
 *{box-sizing:border-box}body{background:var(--bg);color:white;margin:0;padding:12px 12px max(12px,env(safe-area-inset-bottom))}
 header{max-width:1680px;margin:0 auto 10px;display:flex;justify-content:space-between;gap:12px;align-items:center}
-h1{font-size:18px;font-weight:700;margin:0}#status{color:#ffcd78;font-size:12px}
+h1{font-size:18px;font-weight:700;margin:0}#status{color:#ffcd78;font-size:12px}#inputStatus{color:#6ddad4;font-size:12px}header{flex-wrap:wrap}
 .screen-wrap{margin:auto;max-width:1680px;background:#03070b;border:1px solid var(--border);border-radius:12px;overflow:hidden}
 #screen{aspect-ratio:16/9;width:100%;position:relative;display:flex;align-items:center;justify-content:center}
 #screen canvas{max-width:100%;cursor:none!important} #screen, #screen *{cursor:none!important}#placeholder{position:absolute;color:var(--muted);font-size:13px;pointer-events:none}
@@ -23,7 +23,7 @@ button:active{background:#1d3e49;border-color:var(--focus)}button:focus-visible{
 footer{max-width:1680px;color:var(--muted);font-size:11px;line-height:1.6;margin:8px auto}
 @media(max-width:550px){body{padding:8px}.toolbar{justify-content:center}.remote{justify-content:center}.hint{text-align:center}}
 </style></head><body>
-<header><h1>TV Sync · Live Android TV</h1><span id="status" role="status">Connecting to emulator…</span></header>
+<header><h1>TV Sync · Live Android TV</h1><span id="status" role="status">Connecting to emulator…</span><span id="inputStatus" role="status">Remote: connecting</span></header>
 <div class="screen-wrap"><div id="screen"><span id="placeholder">Loading emulator display…</span></div></div>
 <div class="toolbar"><div class="remote">
 <div class="dpad" aria-label="Android TV remote">
@@ -148,42 +148,84 @@ document.getElementById('reconnect').addEventListener('click',()=>{
  connect();
 });
 connect();
-// Preserve rapid D-pad presses in order rather than silently dropping them.
-let remoteQueue=Promise.resolve();
-function send(key,hold=false){
- remoteQueue=remoteQueue.catch(()=>{}).then(async()=>{
-  if(!isVisible())return;
-  const request=()=>fetch('/api/key'+sessionQuery,{
-   method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({key,hold})
-  });
-  try{
-   let response=await request();
-   if(response.status===503){
-    await new Promise(resolve=>setTimeout(resolve,300));
-    response=await request();
-   }
-   const type=response.headers.get('content-type')||'';
-   if(response.ok && type.includes('application/json')){
-    const body=await response.json();
-    if(body.ok){if(rfb && !accessRejected){status.textContent='● Connected';status.style.color='#65e4a3';}return;}
-   }
-   if(response.status===401||response.status===403||
-      (response.ok&&!type.includes('application/json'))){
-    status.textContent='Session authorization expired · reopen your private link';
-   }else if(response.status===503){
-    status.textContent='Android emulator input unavailable · ADB not responding';
-   }else{
-    status.textContent='Remote command failed (HTTP '+response.status+')';
-   }
-   status.style.color='#ff8d8d';
-  }catch(_){
-   status.textContent='Remote connection interrupted · reconnecting';
-   status.style.color='#ffcd78';
-   if(!rfb)scheduleReconnect();
-  }
- });
+// Independent low-latency WebSocket for inputs: no HTTP request/ADB process
+// startup per key, no per-key browser round-trip before sending the next key.
+let control = null;
+let controlRetryTimer = null;
+let controlRetryCount = 0;
+let controlId = 0;
+let pendingKeys = [];
+const MAX_PENDING_KEYS = 12;
+const inputStatus = document.getElementById('inputStatus');
+function controlUrl(){
+ return (location.protocol==='https:'?'wss://':'ws://')+location.host+'/remote-ws'+sessionQuery;
 }
+function clearControlRetry(){
+ if(controlRetryTimer!==null){clearTimeout(controlRetryTimer);controlRetryTimer=null;}
+}
+function scheduleControlReconnect(){
+ if(!isVisible()||controlRetryTimer!==null||accessRejected)return;
+ const delay=Math.min(3000,250*2**Math.min(controlRetryCount++,4));
+ controlRetryTimer=setTimeout(()=>{controlRetryTimer=null;connectControl();},delay);
+}
+function connectControl(){
+ if(!isVisible()||accessRejected)return;
+ clearControlRetry();
+ if(control && (control.readyState===0||control.readyState===1))return;
+ try{
+  const channel=new WebSocket(controlUrl());
+  control=channel;
+  inputStatus.textContent='Remote: connecting';
+  channel.onopen=()=>{
+   if(control!==channel)return;
+   controlRetryCount=0;
+   inputStatus.textContent='Remote: ready';
+   const keys=pendingKeys.splice(0,MAX_PENDING_KEYS);
+   for(const msg of keys) channel.send(JSON.stringify(msg));
+  };
+  channel.onmessage=ev=>{
+   if(control!==channel)return;
+   try{
+    const data=JSON.parse(ev.data);
+    if(data.delivered)inputStatus.textContent='Remote: '+Math.round(data.device_ms)+'ms device';
+    else if(data.error){
+     inputStatus.textContent='Remote: '+data.error.replaceAll('_',' ');
+     if(data.error==='android_input_stalled')status.textContent='Android emulator not responding';
+    }
+   }catch(_){}
+  };
+  channel.onerror=()=>{if(control===channel)inputStatus.textContent='Remote: reconnecting';};
+  channel.onclose=()=>{
+   if(control!==channel)return;
+   control=null;
+   pendingKeys=[]; // don't replay stale key events after iOS suspension
+   inputStatus.textContent='Remote: reconnecting';
+   scheduleControlReconnect();
+  };
+ }catch(_){control=null;scheduleControlReconnect();}
+}
+function send(key,hold=false){
+ if(!isVisible())return;
+ const message={id:++controlId,key,hold};
+ if(control && control.readyState===1){
+  try{control.send(JSON.stringify(message));return;}
+  catch(_){control=null;}
+ }
+ if(pendingKeys.length>=MAX_PENDING_KEYS)pendingKeys.shift();
+ pendingKeys.push(message);
+ connectControl();
+}
+document.addEventListener('visibilitychange',()=>{
+ if(!isVisible()){
+  pendingKeys=[];
+  clearControlRetry();
+  if(control){control.close();control=null;}
+ }else connectControl();
+});
+window.addEventListener('pageshow',connectControl);
+window.addEventListener('online',connectControl);
+connectControl();
+
 for(const b of document.querySelectorAll('[data-key]')){
  b.addEventListener('click',()=>send(b.dataset.key,b.dataset.hold==='true'));
 }
