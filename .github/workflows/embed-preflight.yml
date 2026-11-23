@@ -1,0 +1,45 @@
+name: TV Sync — Secure Chat Embed Preflight
+run-name: Validate private chat viewer without Android boot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/embed-preflight.yml'
+      - 'ci/remote_server.py'
+      - 'ci/live-emulator.html'
+      - 'ci/test_live_remote.py'
+      - 'ci/run_live_tv_session.sh'
+permissions:
+  contents: read
+jobs:
+  verify-embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check authentication, denial, and source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet aiohttp
+          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
+          bash -n ci/run_live_tv_session.sh
+          python3 ci/test_live_remote.py
+          python3 - <<'PY'
+          from pathlib import Path
+          browser = Path('ci/live-emulator.html').read_text()
+          script = Path('ci/run_live_tv_session.sh').read_text()
+          assert "fetch('/api/key'+sessionQuery" in browser
+          assert "'/websockify'+sessionQuery" in browser
+          assert "TVSYNC_EMBED_TOKEN" in script
+          assert "PRIVATE_EMULATOR_EMBED.md" in script
+          assert "unauth_code" in script and '"401"' in script
+          assert "--allowed-mail" in script
+          assert 'echo "$embed_url"' not in script
+          print("Private chat embed security wiring and shell syntax passed.")
+          PY
