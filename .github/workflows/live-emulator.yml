@@ -51,7 +51,7 @@ jobs:
           assert '/api/key' in text
           assert 'rfb.viewOnly=true' in text
           assert 'cursor:none!important' in text
-          assert "'/websockify'+sessionQuery" in text
+          assert "'/websockify' + sessionQuery" in text
           assert "fetch('/api/key'+sessionQuery" in text
           print('Browser remote static validation passed.')
           PY
