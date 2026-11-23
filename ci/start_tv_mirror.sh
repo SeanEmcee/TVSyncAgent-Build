@@ -21,7 +21,7 @@ fi
 adb -s emulator-5554 get-state | grep -qx device
 dimensions="$(adb -s emulator-5554 shell wm size | tr -d '\r')"
 printf 'Android display dimensions: %s\n' "$dimensions"
-if ! printf '%s' "$dimensions" | grep -q '3840x2160'; then
+if ! printf '%s' "$dimensions" | grep -q 'Physical size: 3840x2160'; then
   echo "::error::Android must render at native 3840x2160 (4K), got: $dimensions"
   exit 1
 fi
