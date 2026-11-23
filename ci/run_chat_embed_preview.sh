@@ -53,6 +53,19 @@ authorized_reject="$(curl --silent --output /dev/null --write-out '%{http_code}'
   echo "::error::Emulator bearer-token access checks failed, no public tunnel created."
   exit 1
 }
+# Crucial end-to-end test: an authenticated D-pad request MUST succeed on the
+# running Android emulator before we publish a live browser link.
+auth_button="$(curl --fail --silent --show-error --max-time 12 \
+  -H 'Content-Type: application/json' --data '{"key":"down","hold":false}' \
+  "http://127.0.0.1:6081/api/key?session=$embed_token")" || {
+  echo "::error::Authenticated Android TV D-pad request failed. No tunnel published."
+  exit 1
+}
+if ! printf '%s' "$auth_button" | grep -q '"ok": true'; then
+  echo "::error::Authenticated Android TV command was not accepted."
+  exit 1
+fi
+echo "Authenticated D-pad command accepted by the running Android emulator."
 
 cloudflared tunnel --url http://127.0.0.1:6081 --output json \
   > "$RUNNER_TEMP/embed-tunnel.log" 2>&1 &
