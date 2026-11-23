@@ -13,6 +13,7 @@ on:
       - 'ci/test_live_remote.py'
       - 'ci/test_live_gui.sh'
       - 'ci/start_tv_mirror.sh'
+      - 'ci/configure_4k_avd.sh'
       - 'ci/test_resume_viewer.cjs'
       - 'ci/fast_tv_input.py'
       - 'ci/test_fast_input.py'
@@ -39,7 +40,7 @@ jobs:
           set -euo pipefail
           python3 -m pip install --quiet aiohttp
           python3 -m py_compile ci/remote_server.py ci/test_live_remote.py ci/fast_tv_input.py ci/test_fast_input.py
-          bash -n ci/run_live_tv_session.sh ci/start_tv_mirror.sh
+          bash -n ci/run_live_tv_session.sh ci/start_tv_mirror.sh ci/configure_4k_avd.sh
           python3 ci/test_fast_input.py
           python3 ci/test_live_remote.py
           node ci/test_resume_viewer.cjs
@@ -131,6 +132,8 @@ jobs:
           profile: tv_1080p
           cores: 4
           ram-size: 4096M
+          avd-name: tvsync4k
+          pre-emulator-launch-script: bash ci/configure_4k_avd.sh
           emulator-boot-timeout: 600
           disable-animations: false
           emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
@@ -260,6 +263,8 @@ jobs:
           profile: tv_1080p
           cores: 4
           ram-size: 4096M
+          avd-name: tvsync4k
+          pre-emulator-launch-script: bash ci/configure_4k_avd.sh
           emulator-boot-timeout: 600
           disable-animations: false
           emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
