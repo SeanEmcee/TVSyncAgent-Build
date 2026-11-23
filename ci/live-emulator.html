@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#070c13">
+<meta name="referrer" content="no-referrer">
 <title>TV Sync — Live Android TV Emulator</title>
 <style>
 :root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;--bg:#070c13;--panel:#101b28;--border:#293d4c;--focus:#2ce1eb;--muted:#9caebb}
@@ -41,9 +42,11 @@ const status=document.getElementById('status');
 const holder=document.getElementById('screen');
 const placeholder=document.getElementById('placeholder');
 let rfb;
+const sessionToken = new URLSearchParams(location.search).get('session') || '';
+const sessionQuery = sessionToken ? '?session=' + encodeURIComponent(sessionToken) : '';
 function connect(){
  if(rfb){rfb.disconnect();rfb=undefined;}
- const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/websockify';
+ const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/websockify'+sessionQuery;
  status.textContent='Connecting to emulator…';
  rfb=new RFB(holder,url,{shared:true});
  rfb.scaleViewport=true;rfb.resizeSession=false;rfb.viewOnly=true;
@@ -65,7 +68,7 @@ async function send(key,hold=false){
  if(busy)return;
  busy=true;
  try{
-  const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,hold})});
+  const r=await fetch('/api/key'+sessionQuery,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,hold})});
   if(!r.ok){status.textContent='Remote input unavailable';status.style.color='#ff8d8d';}
  }catch(e){status.textContent='Remote disconnected';status.style.color='#ff8d8d';}
  finally{busy=false;}
