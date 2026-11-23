@@ -100,7 +100,7 @@ jobs:
             > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
           if [[ -e /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; fi
 
-      - name: Boot Android 14 Google TV and open token-gated chat screen
+      - name: Boot Android 16 Google TV and open token-gated chat screen
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
