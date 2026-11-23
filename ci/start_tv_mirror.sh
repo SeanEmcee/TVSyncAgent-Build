@@ -21,15 +21,29 @@ fi
 adb -s emulator-5554 get-state | grep -qx device
 dimensions="$(adb -s emulator-5554 shell wm size | tr -d '\r')"
 printf 'Android display dimensions: %s\n' "$dimensions"
-if ! printf '%s' "$dimensions" | grep -q '1920x1080'; then
-  echo "::error::Android TV was not configured at 1920x1080."
+if ! printf '%s' "$dimensions" | grep -q '3840x2160'; then
+  echo "::error::Android must render at native 3840x2160 (4K), got: $dimensions"
   exit 1
 fi
+# Confirm the Android framebuffer actually has 4K dimensions. An 'wm size'
+# override alone is not reliable proof of 4K rendering.
+adb -s emulator-5554 exec-out screencap -p > "$RUNNER_TEMP/tvsync-4k-check.png"
+python3 - "$RUNNER_TEMP/tvsync-4k-check.png" <<'PY'
+import struct,sys
+with open(sys.argv[1],"rb") as f:
+    header=f.read(24)
+if header[:8]!=b"\x89PNG\r\n\x1a\n" or header[12:16]!=b"IHDR":
+    raise SystemExit("Invalid Android screenshot; cannot verify 4K")
+width,height=struct.unpack(">II",header[16:24])
+if (width,height)!=(3840,2160):
+    raise SystemExit(f"Expected native 3840x2160 screenshot, got {width}x{height}")
+print(f"Native Android screenshot confirmed: {width}x{height}")
+PY
 
 nohup "$binary" --serial emulator-5554 \
   --no-control --no-audio --fullscreen --window-borderless --always-on-top \
   --window-title="TV Sync Mirror" --background-color=000000 \
-  --max-size=1920 --max-fps=60 --video-bit-rate=6M \
+  --max-size=1920 --max-fps=30 --video-bit-rate=3M --video-buffer=0 \
   > "$RUNNER_TEMP/tvsync-scrcpy.log" 2>&1 </dev/null &
 mirror_pid=$!
 echo "$mirror_pid" > "$RUNNER_TEMP/tvsync-scrcpy.pid"
@@ -48,13 +62,13 @@ for i in $(seq 1 50); do
     width="$(printf '%s\n' "$geo" | sed -n 's/^WIDTH=//p')"
     height="$(printf '%s\n' "$geo" | sed -n 's/^HEIGHT=//p')"
     if [[ "${width:-0}" -ge 1850 && "${height:-0}" -ge 1020 ]]; then
-      echo "TV Sync Android mirror fills the desktop: ${width}x${height}."
+      echo "4K Android framebuffer, low-latency 1080p browser preview: ${width}x${height}."
       exit 0
     fi
   fi
   sleep 1
 done
-echo "::error::Android mirror did not fill the virtual 1920x1080 TV display."
+echo "::error::4K Android downscaled mirror did not fill the low-latency 1080p virtual display."
 echo "Window geometry: ${geo:-not found}"
 tail -25 "$RUNNER_TEMP/tvsync-scrcpy.log" || true
 exit 1
