@@ -39,7 +39,10 @@ jobs:
           from pathlib import Path
           browser = Path('ci/live-emulator.html').read_text()
           script = Path('ci/run_live_tv_session.sh').read_text()
-          assert "fetch('/api/key'+sessionQuery" in browser
+          assert "new WebSocket(controlUrl())" in browser
+          assert 'id="theaterToggle"' in browser
+          assert 'id="theaterRemote"' in browser
+          assert "body.theater-active.theater-rotate" in browser
           assert "'/websockify' + sessionQuery" in browser
           assert "new WebSocket(controlUrl())" in browser
           assert "TVSYNC_EMBED_TOKEN" in script
