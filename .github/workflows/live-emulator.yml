@@ -57,7 +57,10 @@ jobs:
           assert 'viewer.viewOnly = true' in text
           assert 'cursor:none!important' in text
           assert "'/websockify' + sessionQuery" in text
-          assert "fetch('/api/key'+sessionQuery" in text
+          assert "new WebSocket(controlUrl())" in text
+          assert 'id="theaterToggle"' in text
+          assert 'id="theaterRemote"' in text
+          assert "body.theater-active.theater-rotate" in text
           print('Browser remote static validation passed.')
           PY
 
