@@ -1,0 +1,87 @@
+name: Experimental — TV Sync native 4K on Apple Silicon GPU
+on:
+  push:
+    branches: [experiment/tvsync-macos-gpu-4k-20261122]
+    paths:
+      - '.github/workflows/mac-4k-gpu.yml'
+      - 'ci/configure_mac_4k_avd.sh'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  mac-4k-gpu-benchmark:
+    name: Verify 4K renderer and real Android frame times
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Retrieve already built TV Sync APK
+        uses: actions/download-artifact@v4
+        with:
+          name: TVSyncAgent-debug-apk
+          run-id: 45097065401
+          repository: SeanEmcee/TVSyncAgent-Build
+          github-token: ${{ github.token }}
+          path: apk
+      - name: Verify APK and host GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s apk/app-debug.apk
+          uname -m
+          system_profiler SPDisplaysDataType | head -50 || true
+          xcrun --find metal || true
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google-tv
+          arch: arm64-v8a
+          profile: tv_4k
+          cores: 3
+          ram-size: 2048M
+          heap-size: 512M
+          avd-name: tvsync4k
+          pre-emulator-launch-script: bash ci/configure_mac_4k_avd.sh
+          emulator-boot-timeout: 600
+          disable-animations: false
+          emulator-options: -gpu host -no-window -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: |
+            set -euo pipefail
+            mkdir -p mac-4k-evidence
+            adb wait-for-device
+            adb shell wm size | tee mac-4k-evidence/display-size.txt
+            adb shell wm density | tee mac-4k-evidence/display-density.txt
+            if adb shell wm size | grep -q 'Override size:'; then adb shell wm size reset; fi
+            adb shell wm size | grep -q 'Physical size: 3840x2160'
+            adb install -r apk/app-debug.apk
+            adb shell am start -W -n dev.tvsync.agent/.MainActivity
+            sleep 3
+            adb shell dumpsys gfxinfo dev.tvsync.agent reset
+            for i in $(seq 1 12); do
+              adb shell input keyevent 20
+              adb shell input keyevent 19
+            done
+            sleep 2
+            adb shell dumpsys gfxinfo dev.tvsync.agent framestats > mac-4k-evidence/gfxinfo.txt
+            sed -n '1,30p' mac-4k-evidence/gfxinfo.txt
+            adb exec-out screencap -p > mac-4k-evidence/native-4k.png
+            python3 - <<'PY'
+            import struct
+            p='mac-4k-evidence/native-4k.png'
+            with open(p,'rb') as f: header=f.read(24)
+            assert header[:8]==b'\x89PNG\r\n\x1a\n' and header[12:16]==b'IHDR'
+            size=struct.unpack('>II',header[16:24]);print('Native TV frame:',size)
+            assert size==(3840,2160),size
+            PY
+            echo 'All results are an experiment, not a change to the main Android TV build.'
+      - name: Preserve rendering evidence even if emulator fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVSync-macOS-4K-GPU-experiment
+          path: mac-4k-evidence/
+          if-no-files-found: warn
+          retention-days: 7
