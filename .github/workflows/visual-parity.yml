@@ -1,0 +1,100 @@
+name: TV Sync — Real Android TV Visual Parity
+run-name: Emulator screenshot and pixel comparison
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/visual-parity.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  visual-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out public screenshot tooling
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Retrieve successful Android TV debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: TVSyncAgent-debug-apk
+          run-id: 45089002708
+          repository: SeanEmcee/TVSyncAgent-Build
+          github-token: ${{ github.token }}
+          path: apk
+
+      - name: Retrieve approved reference (private project)
+        uses: actions/checkout@v4
+        with:
+          repository: SeanEmcee/TVSyncAgent
+          token: ${{ secrets.TVSYNC_PRIVATE_SOURCE_TOKEN }}
+          ref: main
+          path: source
+          persist-credentials: false
+
+      - name: Extract only the approved reference screenshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p report
+          unzip -p source/TVSyncAgent-native-milestone.zip TVSyncAgent/design_reference/DeviceFiles-reference.png > report/reference.png
+          test -s report/reference.png
+          test -s apk/app-debug.apk
+
+      - name: Set up Java 17 and Android emulator tooling
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Enable KVM if available
+        shell: bash
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod a+rw /dev/kvm; else echo "No /dev/kvm: emulator may be slower"; fi
+
+      - name: Capture screenshot in disposable Android 14 Google TV emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google-tv
+          arch: x86
+          profile: tv_1080p
+          cores: 2
+          ram-size: 2048M
+          emulator-boot-timeout: 600
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash ci/capture_visuals.sh
+
+      - name: Configure Python comparison environment
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Generate real-image pixel comparison
+        shell: bash
+        run: |
+          python3 -m pip install --quiet pillow numpy
+          python3 ci/compare_visuals.py
+
+      - name: Upload only screenshots and comparison report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TVSyncAgent-visual-parity-report
+          path: report/
+          if-no-files-found: warn
+          retention-days: 14
