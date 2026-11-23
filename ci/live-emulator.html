@@ -21,10 +21,46 @@ button:active{background:#1d3e49;border-color:var(--focus)}button:focus-visible{
 .extras{display:grid;grid-template-columns:repeat(2,minmax(108px,1fr));gap:8px}
 .extras button{min-height:47px;padding:8px 14px}.extras .hold{color:var(--focus);border-color:var(--focus)}
 footer{max-width:1680px;color:var(--muted);font-size:11px;line-height:1.6;margin:8px auto}
+
+/* A self-contained TV theater: no iframe navigation, new stream, or emulator reset. */
+.theater-stage{position:relative;margin:auto;max-width:1680px}
+.screen-wrap{position:relative}
+.theater-toggle{position:absolute;z-index:8;top:10px;right:10px;padding:8px 11px;display:flex;gap:7px;align-items:center;background:rgba(10,22,32,.85);border:1px solid rgba(72,226,230,.50);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-size:12px;font-weight:650;border-radius:10px;color:#e5fbff;min-height:36px}
+.theater-toggle:focus-visible{outline:2px solid #28e5e8}
+.theater-remote{display:none}
+#theaterHint{display:none}
+body.theater-active{overflow:hidden;overscroll-behavior:none}
+body.theater-active .theater-stage{position:fixed;z-index:10000;inset:0;width:100dvw;height:100dvh;max-width:none;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+body.theater-active .screen-wrap{width:min(100dvw,calc(100dvh * 16 / 9));max-width:none;margin:0;border:0;border-radius:0;overflow:hidden}
+body.theater-active .theater-toggle{top:max(7px,env(safe-area-inset-top));right:max(9px,env(safe-area-inset-right));background:rgba(12,21,32,.80)}
+body.theater-active .theater-remote{position:absolute;display:flex;flex-direction:row;gap:9px;align-items:center;right:max(10px,env(safe-area-inset-right));bottom:max(9px,env(safe-area-inset-bottom));z-index:12;padding:7px 10px;background:rgba(8,15,24,.87);border:1px solid rgba(72,226,230,.38);border-radius:16px;box-shadow:0 6px 22px #000a;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.theater-remote-dpad{display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:repeat(3,29px);gap:2px}
+.theater-remote button{padding:0;min-width:30px;min-height:26px;border-radius:8px;background:#1a2c3a;border:1px solid #355160;color:#f2ffff;font-size:12px;touch-action:manipulation}
+.theater-remote button:active{background:#125466;border-color:#27e1e8}
+.theater-remote .theater-ok{font-size:11px;font-weight:750;border:1.5px solid #27e1e8;color:#51e9ed;background:#0e323b}
+.theater-remote-actions{display:flex;flex-direction:column;gap:5px}
+.theater-remote-actions button{min-width:61px;height:38px;padding:0 6px;font-size:11px}
+body.theater-active.theater-rotate .theater-stage{inset:auto;top:0;left:100dvw;width:100dvh;height:100dvw;transform:rotate(90deg);transform-origin:top left}
+body.theater-active.theater-rotate .screen-wrap{width:min(100dvh,calc(100dvw * 16 / 9))}
+body.theater-active.theater-rotate .theater-toggle{top:8px;right:8px}
+body.theater-active.theater-rotate .theater-remote{right:10px;bottom:9px}
+body.theater-active #theaterHint{display:block;position:absolute;pointer-events:none;left:12px;bottom:12px;z-index:8;color:#a6d8df;font-size:11px;opacity:.8;max-width:48%}
+@media(max-width:650px) and (orientation:landscape){body.theater-active .theater-remote{padding:5px 7px}.theater-remote-dpad{grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,27px)}}
 @media(max-width:550px){body{padding:8px}.toolbar{justify-content:center}.remote{justify-content:center}.hint{text-align:center}}
 </style></head><body>
 <header><h1>TV Sync · Live Android TV</h1><span id="status" role="status">Connecting to emulator…</span><span id="inputStatus" role="status">Remote: connecting</span></header>
-<div class="screen-wrap"><div id="screen"><span id="placeholder">Loading emulator display…</span></div></div>
+<div id="theaterStage" class="theater-stage" aria-label="TV Sync emulator screen">
+<div class="screen-wrap"><div id="screen"><span id="placeholder">Loading emulator display…</span></div>
+<button id="theaterToggle" class="theater-toggle" type="button" aria-label="Enter landscape fullscreen" aria-pressed="false" title="Fullscreen landscape">⛶ <span id="theaterToggleLabel">Fullscreen</span></button></div>
+<div id="theaterRemote" class="theater-remote" aria-label="Compact TV remote">
+<div class="theater-remote-dpad" aria-label="Directional buttons">
+<span></span><button data-key="up" type="button" aria-label="Up">▲</button><span></span>
+<button data-key="left" type="button" aria-label="Left">◀</button><button class="theater-ok" data-key="ok" type="button" aria-label="OK">OK</button><button data-key="right" type="button" aria-label="Right">▶</button>
+<span></span><button data-key="down" type="button" aria-label="Down">▼</button><span></span>
+</div><div class="theater-remote-actions"><button data-key="back" type="button" aria-label="Back">↶ Back</button><button data-key="home" type="button" aria-label="Home">⌂ Home</button></div>
+</div>
+<div id="theaterHint" role="status" aria-live="polite"></div>
+</div>
 <div class="toolbar"><div class="remote">
 <div class="dpad" aria-label="Android TV remote">
 <span></span><button data-key="up" aria-label="Up">↑</button><span></span>
@@ -225,6 +261,68 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('pageshow',connectControl);
 window.addEventListener('online',connectControl);
 connectControl();
+
+
+/* iOS Safari does not currently guarantee native orientation lock or fullscreen.
+   Prefer the supported APIs, then rotate only the TV theater within the page. */
+const theaterStage=document.getElementById('theaterStage');
+const theaterToggle=document.getElementById('theaterToggle');
+const theaterToggleLabel=document.getElementById('theaterToggleLabel');
+const theaterHint=document.getElementById('theaterHint');
+let theaterActive=false;
+let attemptedNativeFullscreen=false;
+function isPortrait(){return window.matchMedia ? window.matchMedia('(orientation: portrait)').matches : window.innerHeight>window.innerWidth;}
+function applyTheaterGeometry(){
+ if(!theaterActive)return;
+ const rotate=isPortrait();
+ document.body.classList.toggle('theater-rotate',rotate);
+ theaterHint.textContent=rotate ? 'Hold your phone sideways for landscape viewing' : '';
+}
+async function enterTheater(){
+ if(theaterActive)return;
+ theaterActive=true;
+ document.body.classList.add('theater-active');
+ theaterToggle.setAttribute('aria-pressed','true');
+ theaterToggle.setAttribute('aria-label','Exit fullscreen');
+ theaterToggleLabel.textContent='Exit';
+ applyTheaterGeometry();
+ // Browser gestures are required for the native requests. Failure is safe:
+ // CSS theater works without reloading or reconnecting the emulator.
+ if(typeof theaterStage.requestFullscreen==='function'){
+  try{
+   await theaterStage.requestFullscreen();
+   attemptedNativeFullscreen=true;
+  }catch(_){}
+ }
+ if(window.screen && window.screen.orientation && typeof window.screen.orientation.lock==='function'){
+  try{await window.screen.orientation.lock('landscape');}catch(_){}
+ }
+ applyTheaterGeometry();
+}
+function exitTheater(){
+ if(!theaterActive)return;
+ theaterActive=false;
+ document.body.classList.remove('theater-active','theater-rotate');
+ theaterToggle.setAttribute('aria-pressed','false');
+ theaterToggle.setAttribute('aria-label','Enter landscape fullscreen');
+ theaterToggleLabel.textContent='Fullscreen';
+ theaterHint.textContent='';
+ if(window.screen && window.screen.orientation && typeof window.screen.orientation.unlock==='function'){
+  try{window.screen.orientation.unlock();}catch(_){}
+ }
+ if(attemptedNativeFullscreen && document.fullscreenElement===theaterStage && typeof document.exitFullscreen==='function'){
+  document.exitFullscreen().catch(()=>{});
+ }
+ attemptedNativeFullscreen=false;
+}
+theaterToggle.addEventListener('click',()=>{
+ if(theaterActive)exitTheater();else enterTheater();
+});
+window.addEventListener('resize',applyTheaterGeometry);
+window.addEventListener('orientationchange',applyTheaterGeometry);
+document.addEventListener('fullscreenchange',()=>{
+ if(theaterActive && attemptedNativeFullscreen && document.fullscreenElement!==theaterStage)exitTheater();
+});
 
 for(const b of document.querySelectorAll('[data-key]')){
  b.addEventListener('click',()=>send(b.dataset.key,b.dataset.hold==='true'));
