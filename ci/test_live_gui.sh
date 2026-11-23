@@ -3,8 +3,10 @@
 set -euo pipefail
 test -s apk/app-debug.apk
 adb wait-for-device
-adb -s emulator-5554 shell wm size 3840x2160
-adb -s emulator-5554 shell wm density 320
+# AVD hardware must already be 4K. Do not hide a 1080p physical
+# framebuffer behind a late WindowManager resolution override.
+adb -s emulator-5554 shell wm size
+adb -s emulator-5554 shell wm density
 adb install -r apk/app-debug.apk
 adb shell appops set dev.tvsync.agent MANAGE_EXTERNAL_STORAGE allow || true
 adb shell 'mkdir -p /sdcard/Download /sdcard/Pictures'
