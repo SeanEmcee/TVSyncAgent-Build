@@ -96,7 +96,7 @@ jobs:
           DISPLAY=:99 xdpyinfo > /dev/null
           nohup openbox > "$RUNNER_TEMP/openbox.log" 2>&1 </dev/null &
           nohup x11vnc -display :99 -localhost -rfbport 5900 -forever -shared -nopw -quiet \
-            -nocursor -nocursorshape -nocursorpos -nowait_bog -wait 10 -defer 5 \
+            -nocursor -nocursorshape -nocursorpos -nowait_bog -nonap -sb 0 -wait 10 -defer 5 \
             > "$RUNNER_TEMP/x11vnc.log" 2>&1 </dev/null &
           if [[ -e /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; fi
 

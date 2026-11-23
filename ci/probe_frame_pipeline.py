@@ -97,3 +97,6 @@ if numeric:
 print("PIPELINE_METRICS",json.dumps(results),flush=True)
 if results["missing_frames"]:
     raise RuntimeError("VNC failed to deliver one or more changed frames within 5s")
+# A delayed first wakeup is a failure even if later updates are quick.
+if numeric and max(numeric) > 600:
+    raise RuntimeError("X11-to-browser update exceeded 600ms after idle: " + str(results))
