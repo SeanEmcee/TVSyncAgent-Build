@@ -21,7 +21,7 @@ on:
 
 concurrency:
   group: tvsync-${{ github.event_name == 'workflow_dispatch' && 'live-emulator' || 'gui-smoke' }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   preflight:
