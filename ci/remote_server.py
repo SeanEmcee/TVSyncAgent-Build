@@ -47,23 +47,39 @@ async def remote_key(request):
     hold=data.get("hold",False)
     if key not in KEYS or type(hold) is not bool or (hold and key!="ok"):
         raise web.HTTPBadRequest(text="Unsupported TV remote action")
-    command=["adb","shell","input","keyevent"]
+    # Target ONLY the disposable emulator, never an unrelated ADB device.
+    # Serialize key events to preserve D-pad order across browser requests.
+    command=["adb","-s","emulator-5554","shell","input","keyevent"]
     if hold: command.append("--longpress")
     command.append(str(KEYS[key]))
-    try:
-        proc=await asyncio.create_subprocess_exec(*command,
-              stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-        try:
-            await asyncio.wait_for(proc.communicate(),timeout=10)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise web.HTTPGatewayTimeout(text="Emulator not responding")
-    except OSError:
-        raise web.HTTPServiceUnavailable(text="ADB unavailable")
-    if proc.returncode:
-        raise web.HTTPServiceUnavailable(text="Emulator is unavailable")
-    return web.json_response({"ok":True,"key":key,"hold":hold})
+    async with request.app["remote_lock"]:
+        for attempt in range(2):
+            try:
+                proc=await asyncio.create_subprocess_exec(
+                    *command,stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE)
+                try:
+                    stdout,stderr=await asyncio.wait_for(proc.communicate(),timeout=8)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    return web.json_response(
+                        {"ok":False,"error":"adb_timeout","retryable":True},status=503)
+            except OSError:
+                return web.json_response(
+                    {"ok":False,"error":"adb_not_found","retryable":False},status=503)
+            if proc.returncode == 0:
+                return web.json_response({"ok":True,"key":key,"hold":hold})
+            detail=stderr.decode("utf-8","replace")[:180].strip()
+            print("TV Sync emulator input failed (code {}): {}".format(proc.returncode,detail),
+                  flush=True)
+            if attempt == 0 and ("offline" in detail.lower() or "not found" in detail.lower()
+                                or "no devices" in detail.lower()):
+                await asyncio.sleep(.2)
+                continue
+            return web.json_response(
+                {"ok":False,"error":"adb_command_failed","retryable":True},status=503)
+    return web.json_response({"ok":False,"error":"adb_unavailable"},status=503)
 
 async def vnc_socket(request):
     """Bridge WebSocket RFB bytes only to localhost VNC, no general TCP proxy."""
@@ -104,6 +120,7 @@ async def vnc_socket(request):
 def make_app(novnc_root:Path,index_file:Path,session_token=""):
     app=web.Application(client_max_size=4096,middlewares=[security_headers])
     app["session_token"] = session_token
+    app["remote_lock"] = asyncio.Lock()
     app["index_file"]=index_file
     app.router.add_get("/",index)
     app.router.add_get("/health",health)
