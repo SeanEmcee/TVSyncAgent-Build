@@ -49,7 +49,7 @@ jobs:
           assert "import RFB from './core/rfb.js'" in text
           assert '/websockify' in text
           assert '/api/key' in text
-          assert 'rfb.viewOnly=true' in text
+          assert 'viewer.viewOnly = true' in text
           assert 'cursor:none!important' in text
           assert "'/websockify' + sessionQuery" in text
           assert "fetch('/api/key'+sessionQuery" in text
