@@ -12,6 +12,7 @@ on:
       - 'ci/run_live_tv_session.sh'
       - 'ci/test_live_remote.py'
       - 'ci/test_live_gui.sh'
+      - 'ci/start_tv_mirror.sh'
       - 'ci/test_resume_viewer.cjs'
 
 concurrency:
@@ -36,7 +37,7 @@ jobs:
           set -euo pipefail
           python3 -m pip install --quiet aiohttp
           python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
-          bash -n ci/run_live_tv_session.sh
+          bash -n ci/run_live_tv_session.sh ci/start_tv_mirror.sh
           python3 ci/test_live_remote.py
           node ci/test_resume_viewer.cjs
       - name: Validate browser remote JavaScript
@@ -98,7 +99,7 @@ jobs:
           python3 -m pip install --quiet aiohttp
           test -f /usr/share/novnc/core/rfb.js
           ldconfig -p | grep -F 'libpulse.so.0'
-          nohup Xvfb :99 -screen 0 1920x1200x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb-smoke.log" 2>&1 </dev/null &
+          nohup Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb-smoke.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then break; fi
             sleep 1
@@ -213,7 +214,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          nohup Xvfb :99 -screen 0 1920x1200x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
+          nohup Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac > "$RUNNER_TEMP/xvfb.log" 2>&1 </dev/null &
           for i in $(seq 1 20); do
             if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then break; fi
             sleep 1
