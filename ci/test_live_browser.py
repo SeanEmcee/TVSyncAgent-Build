@@ -23,6 +23,25 @@ with sync_playwright() as p:
         assert page.locator('#theaterRemote').is_visible()
         for key in ['up','down','left','right','ok','back','home']:
             assert page.locator('#theaterRemote button[data-key="'+key+'"]').is_visible(),key
+        # Drag via the handle, not over remote keys. The rotated iOS portrait
+        # layout must translate pointer movement to stage coordinates.
+        handle=page.locator('#theaterRemoteHandle')
+        assert handle.is_visible()
+        before=page.locator('#theaterRemote').bounding_box()
+        grip=handle.bounding_box()
+        sx=grip['x']+grip['width']/2
+        sy=grip['y']+grip['height']/2
+        page.mouse.move(sx,sy)
+        page.mouse.down()
+        page.mouse.move(sx-90,sy-60,steps=5)
+        page.mouse.up()
+        after=page.locator('#theaterRemote').bounding_box()
+        displacement=abs(after['x']-before['x'])+abs(after['y']-before['y'])
+        assert displacement>15,('drag did not move',label,before,after)
+        assert after['x']>=-2 and after['y']>=-2,('remote escaped viewport',label,after)
+        assert after['x']+after['width']<=width+2,('remote exceeds width',label,after)
+        assert after['y']+after['height']<=height+2,('remote exceeds height',label,after)
+        print('PASS: draggable remote',label,'moved px',round(displacement,1))
         page.screenshot(path=str(OUT/('tvsync-live-chrome-'+label+'.png')))
         # This must reach the actual emulator, not merely change a browser label.
         page.locator('#inputStatus').get_by_text(re.compile('Remote: ready')).wait_for(timeout=5000)
