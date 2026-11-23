@@ -123,7 +123,16 @@ if [[ -n "${TVSYNC_PRIVATE_SOURCE_TOKEN:-}" ]]; then
     echo "::warning::Private embed gate refused unauthenticated test incorrectly; embed tunnel disabled."
   fi
   if [[ "$embed_private_published" == true ]]; then
-    echo "::notice title=TV Sync Secure Chat Embed::The short-lived embed link is in the PRIVATE TVSyncAgent repository's PRIVATE_EMULATOR_EMBED.md file."
+    private_page="https://github.com/SeanEmcee/TVSyncAgent/blob/main/PRIVATE_EMULATOR_EMBED.md"
+    echo "::notice title=TV Sync Secure Chat Embed::Open the private repository's PRIVATE_EMULATOR_EMBED.md for the reusable session link."
+    {
+      echo ""
+      echo "### Recommended: automatic reconnect without repeat email verification"
+      echo "[Open private TV emulator access link]($private_page)"
+      echo "Use the protected temporary session link on that PRIVATE page. iOS can suspend the live picture in the background; it will reconnect when reopened while the runner is active."
+    } >> "$GITHUB_STEP_SUMMARY"
+    update_status "Show private TV emulator resume link" \
+      "# TV Sync live emulator\n\n**Recommended for iPhone / ChatGPT:** [Open private no-repeat-email emulator link]($private_page). Use the temporary link inside that private file.\n\n**Email verification alternative:** [Open OTP-protected emulator]($url)\n\nAutomatic reconnection works while the GitHub session and its private token remain valid; iOS may suspend the live stream while backgrounded.\n\n[Live run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)\n"
   else
     echo "::warning::Private embed unavailable; the existing email-verified live viewer remains protected."
     if [[ -n "$embed_cloud_pid" ]]; then kill "$embed_cloud_pid" 2>/dev/null || true; fi
