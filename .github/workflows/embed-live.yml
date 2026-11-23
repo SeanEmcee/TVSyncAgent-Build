@@ -105,12 +105,12 @@ jobs:
           api-level: 34
           target: google-tv
           arch: x86
-          profile: tv_1080p
+          profile: tv_4k
           cores: 4
           ram-size: 4096M
           avd-name: tvsync4k
           pre-emulator-launch-script: bash ci/configure_4k_avd.sh
           emulator-boot-timeout: 600
           disable-animations: false
-          emulator-options: -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          emulator-options: -gpu swiftshader -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: bash ci/run_chat_embed_preview.sh
