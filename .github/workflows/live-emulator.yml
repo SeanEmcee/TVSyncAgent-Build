@@ -14,7 +14,7 @@ on:
       - 'ci/test_live_gui.sh'
 
 concurrency:
-  group: tvsync-live-emulator
+  group: tvsync-${{ github.event_name == 'workflow_dispatch' && 'live-emulator' || 'gui-smoke' }}
   cancel-in-progress: false
 
 jobs:
