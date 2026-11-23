@@ -25,6 +25,20 @@ if ! printf '%s' "$dimensions" | grep -q 'Physical size: 3840x2160'; then
   echo "::error::Android must render at native 3840x2160 (4K), got: $dimensions"
   exit 1
 fi
+# Root cause of the failed 4K runs: the inherited tv_1080p Android profile
+# retains a WindowManager override even after the AVD's physical LCD is 4K.
+# Clear that stale override, without changing the physical display or lying
+# to the screenshot check. Android must then report the hardware size only.
+if printf '%s' "$dimensions" | grep -q 'Override size:'; then
+  echo "Resetting inherited WindowManager resolution override to native 4K."
+  adb -s emulator-5554 shell wm size reset
+  dimensions="$(adb -s emulator-5554 shell wm size | tr -d '\r')"
+  printf 'Effective Android display: %s\n' "$dimensions"
+fi
+if ! printf '%s' "$dimensions" | grep -qx 'Physical size: 3840x2160'; then
+  echo "::error::4K hardware still has an active display-size override: $dimensions"
+  exit 1
+fi
 # Confirm the Android framebuffer actually has 4K dimensions. An 'wm size'
 # override alone is not reliable proof of 4K rendering.
 adb -s emulator-5554 exec-out screencap -p > "$RUNNER_TEMP/tvsync-4k-check.png"
