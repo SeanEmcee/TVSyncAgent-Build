@@ -2,6 +2,10 @@ name: Build TV Sync Agent APK
 run-name: TV Sync Android TV build
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-tv-sync.yml'
 
 permissions:
   contents: read
