@@ -9,6 +9,8 @@ on:
       - 'ci/live-emulator.html'
       - 'ci/test_live_remote.py'
       - 'ci/test_resume_viewer.cjs'
+      - 'ci/fast_tv_input.py'
+      - 'ci/test_fast_input.py'
       - 'ci/run_live_tv_session.sh'
 permissions:
   contents: read
@@ -28,8 +30,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m pip install --quiet aiohttp
-          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
+          python3 -m py_compile ci/remote_server.py ci/test_live_remote.py ci/fast_tv_input.py ci/test_fast_input.py
           bash -n ci/run_live_tv_session.sh
+          python3 ci/test_fast_input.py
           python3 ci/test_live_remote.py
           node ci/test_resume_viewer.cjs
           python3 - <<'PY'
@@ -38,6 +41,7 @@ jobs:
           script = Path('ci/run_live_tv_session.sh').read_text()
           assert "fetch('/api/key'+sessionQuery" in browser
           assert "'/websockify' + sessionQuery" in browser
+          assert "new WebSocket(controlUrl())" in browser
           assert "TVSYNC_EMBED_TOKEN" in script
           assert "PRIVATE_EMULATOR_EMBED.md" in script
           assert "unauth_code" in script and '"401"' in script
