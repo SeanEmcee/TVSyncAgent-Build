@@ -23,7 +23,7 @@ with sync_playwright() as p:
         assert page.locator('#theaterRemote').is_visible()
         for key in ['up','down','left','right','ok','back','home']:
             assert page.locator('#theaterRemote button[data-key="'+key+'"]').is_visible(),key
-        page.screenshot(path=str(OUT/'tvsync-live-chrome-'+label+'.png'))
+        page.screenshot(path=str(OUT/('tvsync-live-chrome-'+label+'.png')))
         # This must reach the actual emulator, not merely change a browser label.
         page.locator('#inputStatus').get_by_text(re.compile('Remote: ready')).wait_for(timeout=5000)
         page.locator('#theaterRemote button[data-key="down"]').click(timeout=8000)
