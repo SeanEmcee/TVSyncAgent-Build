@@ -35,6 +35,7 @@ jobs:
           set -euo pipefail
           python3 -m pip install --quiet aiohttp
           python3 -m py_compile ci/remote_server.py ci/test_live_remote.py
+          bash -n ci/run_live_tv_session.sh
           python3 ci/test_live_remote.py
       - name: Validate browser remote JavaScript
         shell: bash
@@ -48,6 +49,8 @@ jobs:
           assert '/api/key' in text
           assert 'rfb.viewOnly=true' in text
           assert 'cursor:none!important' in text
+          assert "'/websockify'+sessionQuery" in text
+          assert "fetch('/api/key'+sessionQuery" in text
           print('Browser remote static validation passed.')
           PY
 
@@ -143,6 +146,7 @@ jobs:
     env:
       DISPLAY: ':99'
       TVSYNC_EMULATOR_EMAIL: ${{ secrets.TVSYNC_EMULATOR_EMAIL }}
+      TVSYNC_PRIVATE_SOURCE_TOKEN: ${{ secrets.TVSYNC_PRIVATE_SOURCE_TOKEN }}
     steps:
       - name: Require secure email-restricted tunnel
         shell: bash
